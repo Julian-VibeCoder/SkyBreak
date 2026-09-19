@@ -1,19 +1,15 @@
-# SkyBreak - Architecture Overview (Updated)
+# SkyBreak - Architecture Overview
 
-## Key Changes
-- **Destinations Filterable** — UI filters turn-around list by destination
-- **Next Year Only** — Scraper fetches only upcoming 12 months of flight data
-- **Test-Driven** — All new features start with failing test specs
-- **Data Sources** — Arrivals/departures from real free REST API (batch mode); prices from Google Flight Scraper only
+## Changes
+- Filter by Date (Story 13)
+- Dual Price Display: single leg + combined (Story 14)
+- TDD, REST API, Next Year, Filter Destinations (prior updates)
 
-## API Strategy
-- **Free REST API** (e.g., AviationStack, FlightAware free tier, or OpenFlights) — batched requests to handle rate limits
-- **Google Flight Scraper** — price extraction only (not schedules)
+## Price Display Design
+- Single Flight Price shown per leg
+- Combined Price shown for full turn-around
+- Both visible in trip list and detail view
 
-## Implementation (TDD)
-1. Write failing test for filter
-2. Implement filter logic
-3. Write failing test for 1-year fetch
-4. Implement time window restriction
-5. Write integration test for API batch
-6. Implement batch fetching
+## Date Filter Design
+- Date picker / range filter on turn-around list
+- Only trips within selected window shown
