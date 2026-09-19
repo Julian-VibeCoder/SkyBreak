@@ -180,7 +180,7 @@ Create comprehensive architecture docs covering components, data flow, and techn
 1. **Architecture Setup** - Docker compose, basic project structure
 2. **Airport Management** - CRUD for airports
 3. **Flight Scraper Integration** - Connect to Google Flight Scraper
-4. **Turnaround Calculation** - Logic for round trips
+4. **Turnaround Calculation** - Core algorithm for round trips
 5. **Monitoring System** - Track and store trips
 6. **Price Tracking** - Daily price checks
 7. **Visualization** - Price charts
