@@ -1,8 +1,8 @@
-name: CI
+name: Vacation CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, story-13-14-date-price-filter]
   pull_request:
     branches: [main]
 
