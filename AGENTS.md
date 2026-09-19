@@ -1,8 +1,9 @@
 # KI / Agent Anweisungen — Workflow
+1. Vor Erstellen eines Feature-Branch: git pull origin main (main immer gepufft/aktuell)
 2. Erst Design-Dokument unter `doc/designs/<Feature>.md` (kein globales DESIGN.md) — feature-basiert benannt
 ## Pflicht-Regeln (für alle Änderungen)
 1. Immer Feature-Branch erstellen (`git checkout -b ...`)
-2. Erst Design-Dokument (`DESIGN.md` / `AGENTS.md`)
+2. Erst Design-Dokument unter `doc/designs/<Feature>.md`
 3. Design-Review gegen User Stories (`doc/user-stories.md`) + Architektur (`doc/architecture.md`)
 4. Iteriere Design + Review bis Kompatibilität bestätigt
 5. Konkreter Implementierungsplan (`doc/plans/<Feature>.md`)
@@ -14,6 +15,7 @@
 11. PR erstellen (`create_pull_request`)
 12. GitHub Actions validieren (Workflow prüfen / `gh run`)
 13. PR mergen wenn ok
+14. PR nur mit expliziter Zustimmung des Benutzers erstellen (keine automatischen PRs)
 
 ## Design-Review-Checkliste
 - [ ] User Stories abgedeckt?
