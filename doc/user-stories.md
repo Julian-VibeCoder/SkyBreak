@@ -188,4 +188,22 @@ Create comprehensive architecture docs covering components, data flow, and techn
 9. **Configuration** - Days off, thresholds, etc.
 10. **Frontend** - UI for all features
 
-Each story can be developed and tested independently, allowing incremental delivery.
+Each story can be developed and tested independently, allowing incremental delivery.Test-Update: Filter, Next-Year-Only, TDD, REST-API (free), Google-Flight=prices only
+## Story 13: Filter by Date
+
+**Title:** As a user, I want to filter potential trips by date.
+
+**Acceptance Criteria:**
+- Date picker or date-range filter
+- Only trips matching selected date shown
+
+---
+
+## Story 14: Visible Flight Prices
+
+**Title:** As a user, I want to see trip prices as both single flight prices and combined price.
+
+**Acceptance Criteria:**
+- Each flight leg shows individual price
+- Combined total price shown for turn-around
+- Both prices visible in list and details
