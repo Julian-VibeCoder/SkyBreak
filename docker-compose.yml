@@ -1,0 +1,9 @@
+version: "3.9"
+services:
+  app:
+    build: .
+    volumes: [".:/app"]
+    command: python -m pytest
+  db:
+    image: sqlite:latest
+    volumes: ["./data:/data"]

@@ -12,6 +12,13 @@ Users can input international airport codes (e.g., "LHR", "JFK", "CDG") to disco
 - Validation ensures valid IATA codes
 - Code is stored in the system for later use
 - Error handling for invalid codes
+- Frontend input form validates and submits to backend API
+- Backend stores validated code and returns confirmation to UI
+- UI displays stored airport list with feedback
+
+- Frontend input form validates and submits to backend API
+- Backend stores validated code and returns confirmation to UI
+- UI displays stored airport list with feedback
 
 **Priority:** High
 
@@ -28,6 +35,10 @@ The system should fetch flight schedules from the integrated Google Flight Scrap
 - Data is persisted in the local database
 - Invalid or missing data is handled gracefully
 
+- Frontend input form validates and submits to backend API
+- Backend stores validated code and returns confirmation to UI
+- UI displays stored airport list with feedback
+
 **Priority:** High
 
 ## Story 3: Calculate Turn-arounds
@@ -43,6 +54,10 @@ The system should compute feasible round-trip itineraries (start → destination
 - Start and end times are configurable
 - Resulting itinerary is stored in the system
 
+- Frontend input form validates and submits to backend API
+- Backend stores validated code and returns confirmation to UI
+- UI displays stored airport list with feedback
+
 **Priority:** High
 
 ## Story 4: Configure Days Off
@@ -57,6 +72,10 @@ Users can set which days (e.g., Saturday and Sunday) should not count as working
 - Turn-around calculation excludes configured days
 - Changes take effect immediately
 
+- Frontend input form validates and submits to backend API
+- Backend stores validated code and returns confirmation to UI
+- UI displays stored airport list with feedback
+
 **Priority:** Medium
 
 ## Story 5: Select Monitored Trips
@@ -70,6 +89,10 @@ Users can choose which computed turn-arounds they want to track for price monito
 - List of monitored trips is displayed in the UI
 - Users can enable/disable monitoring per trip
 - Selected trips are tracked for price changes
+
+- Frontend input form validates and submits to backend API
+- Backend stores validated code and returns confirmation to UI
+- UI displays stored airport list with feedback
 
 **Priority:** Medium
 
@@ -86,6 +109,10 @@ Implement integration with a maintained open-source scraper to fetch current fli
 - Scraper handles rate limits and errors gracefully
 - Fallback mechanism if scraper fails
 
+- Frontend input form validates and submits to backend API
+- Backend stores validated code and returns confirmation to UI
+- UI displays stored airport list with feedback
+
 **Priority:** High
 
 ## Story 7: Price Check Every 24 Hours
@@ -99,6 +126,10 @@ Automated price monitoring runs daily to compare current prices with historical 
 - Scheduler triggers price check daily
 - Comparison against previous price stored in DB
 - New price data is saved
+
+- Frontend input form validates and submits to backend API
+- Backend stores validated code and returns confirmation to UI
+- UI displays stored airport list with feedback
 
 **Priority:** High
 
@@ -114,6 +145,10 @@ Visualize the price trends of monitored turn-arounds over time.
 - Chart updates when new price data is available
 - Clear visualization of price fluctuations
 
+- Frontend input form validates and submits to backend API
+- Backend stores validated code and returns confirmation to UI
+- UI displays stored airport list with feedback
+
 **Priority:** Medium
 
 ## Story 9: Telegram Notifications
@@ -127,6 +162,10 @@ Integrate Telegram Bot API to send alerts when prices drop.
 - User sets maximum price threshold per trip
 - Notification sent via Telegram when price falls below threshold
 - Notification includes trip details and new price
+
+- Frontend input form validates and submits to backend API
+- Backend stores validated code and returns confirmation to UI
+- UI displays stored airport list with feedback
 
 **Priority:** Low (optional feature)
 
@@ -142,6 +181,10 @@ Ability to unmonitor a trip, removing associated notifications and historical da
 - Associated Telegram notifications are stopped
 - Price history for the trip is cleared
 
+- Frontend input form validates and submits to backend API
+- Backend stores validated code and returns confirmation to UI
+- UI displays stored airport list with feedback
+
 **Priority:** Medium
 
 ## Story 11: Remove Entire Airport
@@ -155,6 +198,10 @@ Deletion of an airport should remove all associated data (flights, trips, etc.).
 - Confirmation before deletion
 - All related records are cleaned up
 - No orphaned data remains
+
+- Frontend input form validates and submits to backend API
+- Backend stores validated code and returns confirmation to UI
+- UI displays stored airport list with feedback
 
 **Priority:** Medium
 
@@ -170,6 +217,10 @@ Create comprehensive architecture docs covering components, data flow, and techn
 - Data flow between components is clear
 - Technology stack is specified
 - Implementation roadmap is outlined
+
+- Frontend input form validates and submits to backend API
+- Backend stores validated code and returns confirmation to UI
+- UI displays stored airport list with feedback
 
 **Priority:** Low (foundational)
 
