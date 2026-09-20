@@ -4,7 +4,8 @@ WORKDIR /app
 COPY init_db.py .
 COPY skybreak/ ./skybreak/
 COPY frontend/ ./frontend/
-RUN pip install --no-cache-dir flask pytest && python init_db.py
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt && python init_db.py
 RUN cd frontend && npm install && npm run build || echo "React build attempted"
 COPY . .
 EXPOSE 8000
