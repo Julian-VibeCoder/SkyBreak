@@ -8,7 +8,7 @@ def list_airports():
     conn = sqlite3.connect(DB_PATH)
     rows = conn.execute("SELECT code, name FROM airports").fetchall()
     conn.close()
-    return jsonify([r[0] for r in rows])
+    return jsonify([{"code": r[0], "name": r[1] or ""} for r in rows])
 @app.route("/api/airports", methods=["POST"])
 def create_airport():
     data = request.get_json(force=True)

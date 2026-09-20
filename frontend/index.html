@@ -29,6 +29,11 @@
 <h3 class="text-xl font-bold mb-4">Gespeicherte Airports</h3>
 <ul id="airportList" class="grid grid-cols-3 gap-3"></ul>
 </section>
+<section class="bg-white rounded-2xl shadow p-8 mt-6">
+<h3 class="text-xl font-bold mb-4">Abflüge & Ankünfte</h3>
+<input type="date" id="flightDate" onChange="loadFlights()" class="border border-slate-300 rounded-lg px-3 py-2 mb-3" />
+<ul id="flightList" class="grid grid-cols-1 gap-2"></ul>
+</section>
 </main>
 </div>
 <script>
@@ -37,11 +42,33 @@ async function loadAirports() {
     const res = await fetch('/api/airports');
     const data = await res.json();
     const list = document.getElementById('airportList');
+    // data is array of objects {code, name} or array of strings from older backend
+    const codes = Array.isArray(data) ? data.map(c => typeof c === "string" ? c : c.code || c) : [];
     list.innerHTML = '';
-    data.forEach(code => {
+    codes.forEach(code => {
       const li = document.createElement('li');
       li.className = 'bg-slate-100 rounded px-4 py-3 font-mono text-lg font-semibold flex items-center justify-between';
       li.innerHTML = '<span>' + code + '</span><button onclick="removeAirport(\'' + code + '\')" class="ml-3 text-red-600 hover:text-red-800 font-bold">×</button>';
+      list.appendChild(li);
+    });
+  } catch (e) { console.error(e); }
+}
+async function loadFlights() {
+  try {
+    const airport = document.getElementById('codeInput').value.trim().toUpperCase() || '';
+    const dateFilter = document.getElementById('flightDate').value || '';
+    let url = '/api/flights?';
+    if (airport) url += 'airport=' + airport + '&';
+    if (dateFilter) url += 'date=' + dateFilter;
+    const res = await fetch(url);
+    const data = await res.json();
+    const list = document.getElementById('flightList');
+    list.innerHTML = '';
+    if (data.length === 0) { list.innerHTML = '<li class="text-slate-500">Keine Flüge gefunden</li>'; return; }
+    data.forEach(f => {
+      const li = document.createElement('li');
+      li.className = 'bg-slate-50 rounded px-4 py-3 font-mono flex items-center justify-between';
+      li.innerHTML = '<span><b>' + (f.airport_icao || '') + '</b> → <b>' + (f.destination_icao || '') + '</b> | '+ (f.direction || '') + '</span><span class="text-sm text-slate-600">' + (f.airport_name || '') + ' → '+ (f.destination_name || '') + '</span>';
       list.appendChild(li);
     });
   } catch (e) { console.error(e); }
@@ -56,21 +83,8 @@ document.getElementById('airportForm').addEventListener('submit', async e => {
     if (res.ok) {
       document.getElementById('feedback').textContent = 'Gespeichert: ' + raw;
       input.value = '';
-      await 
-async function removeAirport(code) {
-  try {
-    const res = await fetch('/api/airports/' + code, { method: 'DELETE' });
-    if (res.ok) {
       await loadAirports();
-      document.getElementById('feedback').textContent = 'Entfernt: ' + code;
-    } else {
-      document.getElementById('feedback').textContent = 'Fehler beim Entfernen';
-    }
-  } catch (e) {
-    document.getElementById('feedback').textContent = 'Fehler beim Entfernen';
-  }
-}
-loadAirports();
+      await loadFlights();
     } else {
       document.getElementById('feedback').textContent = 'Serverfehler';
     }
@@ -78,7 +92,6 @@ loadAirports();
     document.getElementById('feedback').textContent = 'Serverfehler';
   }
 });
-
 async function removeAirport(code) {
   try {
     const res = await fetch('/api/airports/' + code, { method: 'DELETE' });
@@ -93,6 +106,7 @@ async function removeAirport(code) {
   }
 }
 loadAirports();
+loadFlights();
 </script>
 </body>
 </html>
