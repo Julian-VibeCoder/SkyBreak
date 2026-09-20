@@ -19,3 +19,13 @@ def add_airport(code: str) -> int:
     conn.commit()
     conn.close()
     return cur.rowcount
+
+def delete_airport(code: str) -> int:
+    if not validate_iata(code):
+        raise ValueError(f"Invalid IATA code: {code}")
+    init_db()
+    conn = sqlite3.connect(DB_PATH, timeout=5)
+    cur = conn.execute("DELETE FROM airports WHERE code = ?", (code.upper(),))
+    conn.commit()
+    conn.close()
+    return cur.rowcount

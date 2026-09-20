@@ -1,5 +1,5 @@
 from flask import Flask, request, jsonify
-from skybreak.airport import add_airport, validate_iata, init_db
+from skybreak.airport import add_airport, delete_airport, validate_iata, init_db
 import sqlite3
 app = Flask(__name__)
 DB_PATH = "skybreak.db"
@@ -17,6 +17,15 @@ def create_airport():
         return jsonify({"error": "Invalid IATA"}), 400
     add_airport(code)
     return jsonify({"added": code})
+
+@app.route("/api/airports/<code>", methods=["DELETE"])
+def remove_airport(code):
+    code = code.strip().upper()
+    if not validate_iata(code):
+        return jsonify({"error": "Invalid IATA"}), 400
+    delete_airport(code)
+    return jsonify({"deleted": code})
+
 @app.route("/")
 def index():
     return open("frontend/index.html").read()
