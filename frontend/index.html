@@ -32,18 +32,67 @@
 </main>
 </div>
 <script>
-document.getElementById('airportForm').addEventListener('submit', e => {
+async function loadAirports() {
+  try {
+    const res = await fetch('/api/airports');
+    const data = await res.json();
+    const list = document.getElementById('airportList');
+    list.innerHTML = '';
+    data.forEach(code => {
+      const li = document.createElement('li');
+      li.className = 'bg-slate-100 rounded px-4 py-3 font-mono text-lg font-semibold flex items-center justify-between';
+      li.innerHTML = '<span>' + code + '</span><button onclick="removeAirport(\'' + code + '\')" class="ml-3 text-red-600 hover:text-red-800 font-bold">×</button>';
+      list.appendChild(li);
+    });
+  } catch (e) { console.error(e); }
+}
+document.getElementById('airportForm').addEventListener('submit', async e => {
   e.preventDefault();
   const input = document.getElementById('codeInput');
   const raw = input.value.trim().toUpperCase();
   if (!/^[A-Z0-9]{3}$/.test(raw)) { document.getElementById('feedback').textContent = 'Ungültiger IATA-Code'; return; }
-  const li = document.createElement('li');
-  li.className = 'bg-slate-100 rounded px-4 py-3 font-mono text-lg font-semibold';
-  li.textContent = raw;
-  document.getElementById('airportList').appendChild(li);
-  document.getElementById('feedback').textContent = 'Gespeichert: ' + raw;
-  input.value = '';
+  try {
+    const res = await fetch('/api/airports', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({code: raw}) });
+    if (res.ok) {
+      document.getElementById('feedback').textContent = 'Gespeichert: ' + raw;
+      input.value = '';
+      await 
+async function removeAirport(code) {
+  try {
+    const res = await fetch('/api/airports/' + code, { method: 'DELETE' });
+    if (res.ok) {
+      await loadAirports();
+      document.getElementById('feedback').textContent = 'Entfernt: ' + code;
+    } else {
+      document.getElementById('feedback').textContent = 'Fehler beim Entfernen';
+    }
+  } catch (e) {
+    document.getElementById('feedback').textContent = 'Fehler beim Entfernen';
+  }
+}
+loadAirports();
+    } else {
+      document.getElementById('feedback').textContent = 'Serverfehler';
+    }
+  } catch (err) {
+    document.getElementById('feedback').textContent = 'Serverfehler';
+  }
 });
+
+async function removeAirport(code) {
+  try {
+    const res = await fetch('/api/airports/' + code, { method: 'DELETE' });
+    if (res.ok) {
+      await loadAirports();
+      document.getElementById('feedback').textContent = 'Entfernt: ' + code;
+    } else {
+      document.getElementById('feedback').textContent = 'Fehler beim Entfernen';
+    }
+  } catch (e) {
+    document.getElementById('feedback').textContent = 'Fehler beim Entfernen';
+  }
+}
+loadAirports();
 </script>
 </body>
 </html>
