@@ -20,6 +20,21 @@ def create_airport():
 @app.route("/")
 def index():
     return open("frontend/index.html").read()
+
+@app.route("/api/flights", methods=["GET"])
+def list_flights():
+    airport = request.args.get("airport", "").strip().upper()
+    conn = sqlite3.connect(DB_PATH)
+    sql = "SELECT airport_icao, destination_icao, flight_direction FROM flights WHERE departure_time >= datetime('now') AND departure_time <= datetime('now', '+365 days')"
+    params = []
+    if airport:
+        sql += " AND airport_icao = ?"
+        params.append(airport)
+    rows = conn.execute(sql, params).fetchall()
+    conn.close()
+    result = [{"airport_icao": r[0], "destination_icao": r[1], "direction": r[2]} for r in rows]
+    return jsonify(result)
+
 if __name__ == "__main__":
     init_db()
     app.run(host="0.0.0.0", port=8000)
