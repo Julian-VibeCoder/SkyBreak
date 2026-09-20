@@ -1,7 +1,7 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, render_template
 from skybreak.airport import add_airport, delete_airport, validate_iata, init_db
 import sqlite3
-app = Flask(__name__)
+app = Flask(__name__, template_folder="frontend")
 DB_PATH = "skybreak.db"
 @app.route("/api/airports", methods=["GET"])
 def list_airports():
@@ -28,7 +28,8 @@ def remove_airport(code):
 
 @app.route("/")
 def index():
-    return open("frontend/index.html").read()
+    from flask import render_template
+    return render_template("index.html")
 
 @app.route("/api/flights", methods=["GET"])
 def list_flights():
