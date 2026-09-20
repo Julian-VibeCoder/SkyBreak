@@ -3,7 +3,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends gcc libsqlite3-
 WORKDIR /app
 COPY init_db.py .
 COPY skybreak/ ./skybreak/
-RUN pip install --no-cache-dir pytest && python -c "from skybreak.airport import init_db; init_db()"
+COPY frontend/ ./frontend/
+RUN pip install --no-cache-dir flask pytest && python init_db.py
 COPY . .
 EXPOSE 8000
-CMD ["python", "-m", "pytest"]
+CMD ["python", "-m", "flask", "run", "--host=0.0.0.0", "--port=8000"]
