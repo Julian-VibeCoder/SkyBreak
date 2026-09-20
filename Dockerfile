@@ -7,7 +7,7 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 COPY init_db.py skybreak/ ./
 RUN python init_db.py
-COPY frontend/package.json frontend/src/ ./frontend/
+COPY frontend/ ./frontend/
 RUN cd frontend && npm install && npm run build || echo "build attempted"
 
 # Final: nur Runtime
@@ -20,7 +20,7 @@ COPY --from=builder /app/skybreak/ ./skybreak/
 COPY --from=builder /app/init_db.py .
 COPY --from=builder /app/skybreak.db .
 COPY --from=builder /app/frontend/build ./frontend/build
-COPY --from=builder /app/frontend/index.html ./frontend/index.html
+
 RUN pip install --no-cache-dir -r requirements.txt 2>/dev/null || true
 EXPOSE 8000
 ENV FLASK_APP=skybreak/app
