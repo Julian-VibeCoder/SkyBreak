@@ -18,9 +18,9 @@ WORKDIR /app
 COPY --from=builder /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
 COPY --from=builder /app/skybreak/ ./skybreak/
 COPY --from=builder /app/init_db.py .
-COPY --from=builder /app/skybreak.db . || true
+COPY --from=builder /app/skybreak.db .
 COPY --from=builder /app/frontend/build ./frontend/build
-COPY --from=builder /app/frontend/index.html ./frontend/index.html || true
+COPY --from=builder /app/frontend/index.html ./frontend/index.html
 RUN pip install --no-cache-dir -r requirements.txt 2>/dev/null || true
 EXPOSE 8000
 ENV FLASK_APP=skybreak/app
