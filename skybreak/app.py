@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_from_directory
 from skybreak.airport import add_airport, delete_airport, validate_iata, init_db
 import sqlite3
 app = Flask(__name__, static_folder="/app/frontend/build/static", static_url_path="/static")
@@ -28,7 +28,7 @@ def remove_airport(code):
 
 @app.route("/")
 def index():
-    return app.send_from_directory("/app/frontend/build", "index.html")
+    return send_from_directory("/app/frontend/build", "index.html")
 
 @app.route("/api/flights", methods=["GET"])
 def list_flights():
