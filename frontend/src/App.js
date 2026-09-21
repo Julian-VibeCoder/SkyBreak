@@ -18,6 +18,7 @@ export default function App() {
   const [apiKeyValue, setApiKeyValue] = useState(''); const [hasApiKey, setHasApiKey] = useState(false);
 
   useEffect(() => {
+    if (tab === 'flights') loadFlights();
     fetch('/api/settings/check').then(r => r.json()).then(data => {
       const has = !!(data && data.has_key);
       setHasApiKey(has);
@@ -181,31 +182,34 @@ export default function App() {
               borderRadius: 18, padding: 24, boxShadow: '0 10px 30px rgba(0,0,0,0.2)'
             }}>
               <h3 style={{ margin: '0 0 14px', fontSize: 18, fontWeight: 700, color: '#f8fafc' }}>Flight Schedule</h3>
-              <div style={{ display: 'flex', gap: 10, marginBottom: 16, flexWrap: 'wrap' }}>
-                <input type="date" value={flightDate} onChange={e => { setFlightDate(e.target.value); loadFlights(); }}
-                  style={{ padding: '10px 14px', borderRadius: 10, border: '1px solid rgba(255,255,255,0.15)',
-                  background: 'rgba(255,255,255,0.06)', color: '#f8fafc', fontSize: 15 }} />
-                <button onClick={loadFlights} style={{
-                  padding: '10px 18px', borderRadius: 10, border: 'none', background: 'linear-gradient(135deg, #38bdf8, #818cf8)',
-                  color: '#0f172a', fontWeight: 700, cursor: 'pointer'
-                }}>Refresh</button>
-              </div>
-              <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: 10 }}>
-                {flights.map(f => (
-                  <li key={f.airport_icao+f.destination_icao} style={{
-                    background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)',
-                    borderRadius: 12, padding: '14px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center'
-                  }}>
-                    <div>
-                      <strong style={{ color: '#f8fafc', fontSize: 15 }}>{f.airport_icao}</strong> <span style={{ color: '#94a3b8' }}>{f.airport_name || ''}</span>
-                      <span style={{ margin: '0 8px', color: '#38bdf8' }}>→</span>
-                      <strong style={{ color: '#f8fafc', fontSize: 15 }}>{f.destination_icao}</strong> <span style={{ color: '#94a3b8' }}>{f.destination_name || ''}</span>
-                      <div style={{ fontSize: 12, color: '#64748b', marginTop: 4 }}>{f.direction}</div>
+              {list.map(airport => {
+                const arr = flights.filter(f => f.airport_icao === airport && f.direction === 'arrival');
+                const dep = flights.filter(f => f.airport_icao === airport && f.direction === 'departure');
+                return (
+                  <div key={airport} style={{ marginBottom: 16 }}>
+                    <button onClick={() => {}} style={{ width: '100%', textAlign: 'left', padding: '12px 16px', borderRadius: 10, border: '1px solid rgba(255,255,255,0.08)', background: 'rgba(255,255,255,0.06)', color: '#f8fafc', fontWeight: 700, fontSize: 16, cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      {airport} <span style={{ color: '#94a3b8', fontWeight: 500 }}>✈️</span>
+                    </button>
+                    <div style={{ marginTop: 8, padding: 8 }}>
+                      <div>
+                        <strong style={{ color: '#4ade80', fontSize: 13 }}>Arrivals</strong>
+                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, marginTop: 6 }}>
+                          <thead><tr style={{ borderBottom: '1px solid rgba(255,255,255,0.1)' }}><th style={{ textAlign: 'left', padding: '4px 8px', color: '#94a3b8' }}>From</th><th style={{ textAlign: 'left', padding: '4px 8px', color: '#94a3b8' }}>Time</th></tr></thead>
+                          <tbody>{arr.map(a => <tr key={a.destination_icao} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}><td style={{ padding: '4px 8px' }}>{a.destination_icao}</td><td style={{ padding: '4px 8px' }}>{a.departure_time}</td></tr>)}</tbody>
+                        </table>
+                      </div>
+                      <div style={{ marginTop: 10 }}>
+                        <strong style={{ color: '#38bdf8', fontSize: 13 }}>Departures</strong>
+                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, marginTop: 6 }}>
+                          <thead><tr style={{ borderBottom: '1px solid rgba(255,255,255,0.1)' }}><th style={{ textAlign: 'left', padding: '4px 8px', color: '#94a3b8' }}>To</th><th style={{ textAlign: 'left', padding: '4px 8px', color: '#94a3b8' }}>Time</th></tr></thead>
+                          <tbody>{dep.map(d => <tr key={d.destination_icao} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}><td style={{ padding: '4px 8px' }}>{d.destination_icao}</td><td style={{ padding: '4px 8px' }}>{d.departure_time}</td></tr>)}</tbody>
+                        </table>
+                      </div>
                     </div>
-                  </li>
-                ))}
-                {!flights.length && <li style={{ color: '#94a3b8', fontSize: 14 }}>No flight data available.</li>}
-              </ul>
+                  </div>
+                );
+              })}
+              {!list.length && <div style={{ color: '#94a3b8', fontSize: 14 }}>No airports saved yet.</div>}
             </section>
           )}
 
