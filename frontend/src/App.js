@@ -14,7 +14,9 @@ export default function App() {
   const [list, setList] = useState([]);
   const [feedback, setFeedback] = useState('');
   const [flights, setFlights] = useState([]);
-  const [flightDate, setFlightDate] = useState('');
+      const [expanded, setExpanded] = useState({});
+    const toggle = (c) => setExpanded(e => ({...e, [c]: !e[c]}));
+    const [flightDate, setFlightDate] = useState('');
   const [apiKeyValue, setApiKeyValue] = useState(''); const [hasApiKey, setHasApiKey] = useState(false);
 
   useEffect(() => {
@@ -187,10 +189,10 @@ export default function App() {
                 const dep = flights.filter(f => f.airport_icao === airport && f.direction === 'departure');
                 return (
                   <div key={airport} style={{ marginBottom: 16 }}>
-                    <button onClick={() => {}} style={{ width: '100%', textAlign: 'left', padding: '12px 16px', borderRadius: 10, border: '1px solid rgba(255,255,255,0.08)', background: 'rgba(255,255,255,0.06)', color: '#f8fafc', fontWeight: 700, fontSize: 16, cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <button onClick={() => toggle(airport)} style={{ width: '100%', textAlign: 'left', padding: '12px 16px', borderRadius: 10, border: '1px solid rgba(255,255,255,0.08)', background: 'rgba(255,255,255,0.06)', color: '#f8fafc', fontWeight: 700, fontSize: 16, cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       {airport} <span style={{ color: '#94a3b8', fontWeight: 500 }}>✈️</span>
                     </button>
-                    <div style={{ marginTop: 8, padding: 8 }}>
+                    <div style={{ marginTop: 8, padding: 8 }}>{expanded[airport] ? (
                       <div>
                         <strong style={{ color: '#4ade80', fontSize: 13 }}>Arrivals</strong>
                         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, marginTop: 6 }}>
@@ -204,7 +206,7 @@ export default function App() {
                           <thead><tr style={{ borderBottom: '1px solid rgba(255,255,255,0.1)' }}><th style={{ textAlign: 'left', padding: '4px 8px', color: '#94a3b8' }}>To</th><th style={{ textAlign: 'left', padding: '4px 8px', color: '#94a3b8' }}>Time</th></tr></thead>
                           <tbody>{dep.map(d => <tr key={d.destination_icao} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}><td style={{ padding: '4px 8px' }}>{d.destination_icao}</td><td style={{ padding: '4px 8px' }}>{d.departure_time}</td></tr>)}</tbody>
                         </table>
-                      </div>
+                      </div></div>) : <span style={{ color: "#94a3b8", fontSize: 13 }}>Click to expand</span>}
                     </div>
                   </div>
                 );
