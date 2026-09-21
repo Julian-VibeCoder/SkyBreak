@@ -61,7 +61,15 @@ def trigger_fetch_for_airport(code: str):
         # Data already available for the next week; skip API request
         return
     try:
-        data = fetch_flights(code)
+        from skybreak.scraper_job import get_latest_flight_time
+        latest_str = get_latest_flight_time(code)
+        if latest_str:
+            from datetime import datetime, timedelta
+            start = (datetime.fromisoformat(latest_str.replace("Z", "+00:00")).replace(tzinfo=None) - timedelta(hours=6)).strftime("%Y-%m-%dT%H:%M")
+            end = (datetime.utcnow() + timedelta(hours=6)).strftime("%Y-%m-%dT%H:%M")
+            data = fetch_flights(code, start_time_str=start, end_time_str=end)
+        else:
+            data = fetch_flights(code)
         if data:
             save_flights(code, data)
     except Exception:

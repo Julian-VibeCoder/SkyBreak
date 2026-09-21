@@ -202,11 +202,12 @@ export default function App() {
                       <div>
                         <strong style={{ color: '#4ade80', fontSize: 13 }}>Arrivals ({arr.length})</strong>
                         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, marginTop: 6 }}>
-                          <thead><tr style={{ borderBottom: '1px solid rgba(255,255,255,0.1)' }}><th style={{ textAlign: 'left', padding: '4px 8px', color: '#94a3b8' }}>From</th><th style={{ textAlign: 'left', padding: '4px 8px', color: '#94a3b8' }}>Time</th></tr></thead>
+                          <thead><tr style={{ borderBottom: '1px solid rgba(255,255,255,0.1)' }}><th style={{ textAlign: 'left', padding: '4px 8px', color: '#94a3b8' }}>From</th><th style={{ textAlign: 'left', padding: '4px 8px', color: '#94a3b8' }}>Flight</th><th style={{ textAlign: 'left', padding: '4px 8px', color: '#94a3b8' }}>Time</th></tr></thead>
                           <tbody>
-                            {arr.length === 0 && <tr><td colSpan="2" style={{ padding: '4px 8px', color: '#94a3b8' }}>No arrivals</td></tr>}
+                            {arr.length === 0 && <tr><td colSpan="3" style={{ padding: '4px 8px', color: '#94a3b8' }}>No arrivals</td></tr>}
                             {arr.map(a => <tr key={a.id || a.destination_icao + a.departure_time} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
                               <td style={{ padding: '4px 8px' }}>{a.destination_name ? a.destination_name + ' (' + a.destination_icao + ')' : a.destination_icao}</td>
+                              <td style={{ padding: '4px 8px', fontWeight: 600 }}>{a.flight_number || '-'}</td>
                               <td style={{ padding: '4px 8px' }}>{a.departure_time ? new Date(a.departure_time).toLocaleString('de-DE', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' }) : '-'}</td>
                             </tr>)}
                           </tbody>
@@ -215,11 +216,12 @@ export default function App() {
                       <div style={{ marginTop: 10 }}>
                         <strong style={{ color: '#38bdf8', fontSize: 13 }}>Departures ({dep.length})</strong>
                         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, marginTop: 6 }}>
-                          <thead><tr style={{ borderBottom: '1px solid rgba(255,255,255,0.1)' }}><th style={{ textAlign: 'left', padding: '4px 8px', color: '#94a3b8' }}>To</th><th style={{ textAlign: 'left', padding: '4px 8px', color: '#94a3b8' }}>Time</th></tr></thead>
+                          <thead><tr style={{ borderBottom: '1px solid rgba(255,255,255,0.1)' }}><th style={{ textAlign: 'left', padding: '4px 8px', color: '#94a3b8' }}>To</th><th style={{ textAlign: 'left', padding: '4px 8px', color: '#94a3b8' }}>Flight</th><th style={{ textAlign: 'left', padding: '4px 8px', color: '#94a3b8' }}>Time</th></tr></thead>
                           <tbody>
-                            {dep.length === 0 && <tr><td colSpan="2" style={{ padding: '4px 8px', color: '#94a3b8' }}>No departures</td></tr>}
+                            {dep.length === 0 && <tr><td colSpan="3" style={{ padding: '4px 8px', color: '#94a3b8' }}>No departures</td></tr>}
                             {dep.map(d => <tr key={d.id || d.destination_icao + d.departure_time} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
                               <td style={{ padding: '4px 8px' }}>{d.destination_name ? d.destination_name + ' (' + d.destination_icao + ')' : d.destination_icao}</td>
+                              <td style={{ padding: '4px 8px', fontWeight: 600 }}>{d.flight_number || '-'}</td>
                               <td style={{ padding: '4px 8px' }}>{d.departure_time ? new Date(d.departure_time).toLocaleString('de-DE', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' }) : '-'}</td>
                             </tr>)}
                           </tbody>

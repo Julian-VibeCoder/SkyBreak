@@ -17,7 +17,7 @@ def get_latest_flight_time(airport_code):
 
 def save_flights(airport_code, flights):
     conn = sqlite3.connect(DB_PATH, timeout=5)
-    conn.execute("CREATE TABLE IF NOT EXISTS flights (id INTEGER PRIMARY KEY AUTOINCREMENT, airport_icao TEXT, airport_name TEXT, destination_icao TEXT, destination_name TEXT, flight_direction TEXT, departure_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP, year_ahead INTEGER DEFAULT 365, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)")
+                conn.execute("CREATE TABLE IF NOT EXISTS flights (id INTEGER PRIMARY KEY AUTOINCREMENT, airport_icao TEXT, airport_name TEXT, destination_icao TEXT, destination_name TEXT, flight_direction TEXT, departure_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP, flight_number TEXT, year_ahead INTEGER DEFAULT 365, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)")
     for f in flights:
         try:
             dep = f.get("departure") or {}
@@ -44,6 +44,7 @@ def save_flights(airport_code, flights):
                 dest_name = (dep.get("airport") or {}).get("name") or dep.get("name") or ""
                 if not dest_icao or str(dest_icao).upper() == str(airport_code).upper():
                     continue
+            flight_number = f.get("number") or f.get("flightNumber") or f.get("flight_number") or ""
             from skybreak.airport_lookup import fetch_airport_name
             airport_name = fetch_airport_name(airport_code) or airport_code
             # Avoid duplicates: check if exact departure+airport+direction+destination exists
