@@ -1,2 +1,5 @@
 flask
 pytest
+requests
+tenacity
+apscheduler
