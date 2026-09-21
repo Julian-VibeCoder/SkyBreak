@@ -16,6 +16,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends libsqlite3-0 \
     && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY --from=builder /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
+COPY --from=builder /app/requirements.txt .
 COPY --from=builder /app/skybreak/ ./skybreak/
 COPY --from=builder /app/init_db.py .
 COPY --from=builder /app/skybreak.db .
