@@ -2,9 +2,9 @@ version: "3.9"
 services:
   app:
     build: .
-    volumes: [".:/app", "./skybreak.db:/app/skybreak.db"]
+    volumes: ["/opt/skybreak/:/data/"]
     ports: ["80:80"]
-    command: python -m flask --app skybreak/app run --host=0.0.0.0 --port=8000
+    command: python -m skybreak.app
   frontend:
     image: nginx:alpine
     volumes: ["./frontend:/usr/share/nginx/html:ro"]
