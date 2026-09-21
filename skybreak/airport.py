@@ -56,32 +56,44 @@ def delete_airport(code: str) -> int:
     return cur.rowcount
 
 def trigger_fetch_for_airport(code: str):
-    import sqlite3
+    import sqlite3, time
+    from skybreak.scraper_job import get_latest_flight_time, save_flights
     from datetime import datetime, timedelta
     from skybreak.flight_scraper import fetch_flights
-    from skybreak.scraper_job import save_flights
+
     conn = sqlite3.connect(DB_PATH, timeout=5)
-    # Check if any flights exist for this airport within the next 7 days
-    week_later = (datetime.utcnow() + timedelta(days=7)).strftime("%Y-%m-%d %H:%M:%S")
-    row = conn.execute("SELECT 1 FROM flights WHERE airport_icao = ? AND departure_time >= datetime('now') AND departure_time <= ? LIMIT 1", (code, week_later)).fetchone()
+    conn2 = sqlite3.connect(DB_PATH, timeout=5)
+    row_max = conn2.execute("SELECT MAX(departure_time) FROM flights WHERE airport_icao = ?", (code,)).fetchone()
+    conn2.close()
+    if row_max and row_max[0]:
+        latest_dt = datetime.fromisoformat(str(row_max[0]).replace("Z", "+00:00"))
+        if latest_dt.tzinfo is not None:
+            latest_dt = latest_dt.replace(tzinfo=None)
+        start_dt = latest_dt - timedelta(hours=6)
+    else:
+        start_dt = datetime.utcnow()
+    target_end = start_dt + timedelta(days=365)
+    wait_time = 30 * 60
+    current_start = start_dt
+    fetched_any = False
+    while True:
+        current_end = current_start + timedelta(hours=6)
+        if current_start >= target_end:
+            break
+        start_str = current_start.strftime("%Y-%m-%dT%H:%M")
+        end_str = current_end.strftime("%Y-%m-%dT%H:%M")
+        try:
+            data = fetch_flights(code, start_time_str=start_str, end_time_str=end_str)
+            if data:
+                save_flights(code, data)
+                fetched_any = True
+            current_start = current_end
+            if current_start >= target_end:
+                break
+        except Exception as e:
+            time.sleep(wait_time)
+            wait_time *= 2
     conn.close()
-    if row:
-        # Data already available for the next week; skip API request
-        return
-    try:
-        from skybreak.scraper_job import get_latest_flight_time
-        latest_str = get_latest_flight_time(code)
-        if latest_str:
-            from datetime import datetime, timedelta
-            start = (datetime.fromisoformat(latest_str.replace("Z", "+00:00")).replace(tzinfo=None) - timedelta(hours=6)).strftime("%Y-%m-%dT%H:%M")
-            end = (datetime.utcnow() + timedelta(hours=6)).strftime("%Y-%m-%dT%H:%M")
-            data = fetch_flights(code, start_time_str=start, end_time_str=end)
-        else:
-            data = fetch_flights(code)
-        if data:
-            save_flights(code, data)
-    except Exception:
-        pass
 
 def init_settings_db():
     conn = sqlite3.connect(DB_PATH, timeout=5)
