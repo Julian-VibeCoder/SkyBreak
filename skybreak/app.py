@@ -1,7 +1,7 @@
 from flask import Flask, request, jsonify, render_template
 from skybreak.airport import add_airport, delete_airport, validate_iata, init_db
 import sqlite3
-app = Flask(__name__, template_folder="frontend", static_folder="frontend/build", static_url_path="/static")
+app = Flask(__name__, template_folder="frontend", static_folder="/app/frontend/build", static_url_path="/static")
 DB_PATH = "skybreak.db"
 @app.route("/api/airports", methods=["GET"])
 def list_airports():
