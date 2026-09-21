@@ -5,6 +5,7 @@ const NAV = [
   { key: 'flights', label: 'Flights', icon: '🛫' },
   { key: 'trips', label: 'Trips', icon: '🧳' },
   { key: 'costs', label: 'Costs', icon: '💰' },
+  { key: 'settings', label: 'Settings', icon: '⚙️' },
 ];
 
 export default function App() {
@@ -110,6 +111,7 @@ export default function App() {
               {tab === 'flights' && 'Browse flight schedules by airport and date.'}
               {tab === 'trips' && 'Plan trips and view itineraries.'}
               {tab === 'costs' && 'Track travel expenses and budget overview.'}
+              {tab === 'settings' && 'Configure API key for flight data access.'}
             </p>
           </div>
           <div style={{
@@ -247,6 +249,42 @@ export default function App() {
               <div style={{ marginTop: 20, padding: 14, borderRadius: 12, background: 'rgba(255,255,255,0.03)', border: '1px dashed rgba(255,255,255,0.12)' }}>
                 <strong style={{ color: '#f8fafc' }}>Total estimated: € 1,750</strong> — Update after booking to see real costs.
               </div>
+            </section>
+          )}
+
+          {tab === 'settings' && (
+            <section style={{
+              background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)',
+              borderRadius: 18, padding: 24, boxShadow: '0 10px 30px rgba(0,0,0,0.2)'
+            }}>
+              <h3 style={{ margin: '0 0 14px', fontSize: 18, fontWeight: 700, color: '#f8fafc' }}>API Settings</h3>
+              <p style={{ color: '#94a3b8', fontSize: 14, marginBottom: 16 }}>Store your RapidAPI key for aviation data access.</p>
+              <form onSubmit={async (e) => {
+                e.preventDefault();
+                const key = document.getElementById('apiKeyInput')?.value || '';
+                const res = await fetch('/api/settings', {
+                  method: 'POST',
+                  headers: {'Content-Type':'application/json'},
+                  body: JSON.stringify({api_key: key})
+                });
+                if (res.ok) {
+                  alert('API key saved');
+                } else {
+                  alert('Failed to save');
+                }
+              }} style={{ display: 'flex', gap: 10 }}>
+                <input id="apiKeyInput" type="password" placeholder="RapidAPI Key"
+                  style={{
+                    flex: '1 1 240px', padding: '10px 14px', borderRadius: 10,
+                    border: '1px solid rgba(255,255,255,0.15)', background: 'rgba(255,255,255,0.06)',
+                    color: '#f8fafc', fontSize: 15, outline: 'none'
+                  }}/>
+                <button type="submit" style={{
+                  padding: '10px 18px', borderRadius: 10, border: 'none',
+                  background: 'linear-gradient(135deg, #38bdf8, #818cf8)',
+                  color: '#0f172a', fontWeight: 700, fontSize: 15, cursor: 'pointer'
+                }}>Speichern</button>
+              </form>
             </section>
           )}
         </div>

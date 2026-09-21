@@ -44,3 +44,23 @@ def trigger_fetch_for_airport(code: str):
             save_flights(code, data)
     except Exception:
         pass
+
+def init_settings_db():
+    conn = sqlite3.connect(DB_PATH, timeout=5)
+    conn.execute("CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT)")
+    conn.commit()
+    conn.close()
+
+def get_setting(key: str) -> str:
+    init_settings_db()
+    conn = sqlite3.connect(DB_PATH, timeout=5)
+    row = conn.execute("SELECT value FROM settings WHERE key = ?", (key,)).fetchone()
+    conn.close()
+    return row[0] if row else ""
+
+def set_setting(key: str, value: str):
+    init_settings_db()
+    conn = sqlite3.connect(DB_PATH, timeout=5)
+    conn.execute("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", (key, value))
+    conn.commit()
+    conn.close()

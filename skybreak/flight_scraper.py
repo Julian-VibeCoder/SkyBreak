@@ -1,6 +1,7 @@
 import requests
 from datetime import datetime, timedelta
 from tenacity import retry, stop_after_attempt, wait_fixed, retry_if_exception_type
+from skybreak.airport import get_setting
 
 BASE_URL = "https://aviationstack.p.rapidapi.com/flights"
 
@@ -12,7 +13,7 @@ BASE_URL = "https://aviationstack.p.rapidapi.com/flights"
 )
 def fetch_flights(airport_code, year_ahead=365):
     params = {
-        "access_key": "",
+        "access_key": get_setting("api_key") or "",
         "dep_icao": airport_code,
         "arr_icao": airport_code,
         "limit": 100,
