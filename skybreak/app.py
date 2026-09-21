@@ -59,6 +59,8 @@ def settings_check():
 
 if __name__ == "__main__":
     init_db()
+    from skybreak.scraper_job import start_scheduler
+    start_scheduler()
     app.run(host="0.0.0.0", port=8000)
 
 @app.route("/api/settings", methods=["GET", "POST"])
