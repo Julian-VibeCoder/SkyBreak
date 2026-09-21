@@ -39,18 +39,8 @@ def fetch_flights(airport_code, year_ahead=None):
         logger.info("RapidAPI aerodatabox response: status=%s airport=%s", res.status_code, airport_code)
         data = res.json()
         flights = data.get("data", []) if isinstance(data, dict) else data
-        cutoff = datetime.utcnow() + timedelta(days=year_ahead)
-        filtered = []
-        for f in flights:
-            dep = f.get("departure") or f.get("scheduled_departure")
-            if dep:
-                try:
-                    dep_dt = datetime.fromisoformat(str(dep).replace("Z", "+00:00"))
-                    if dep_dt <= cutoff:
-                        filtered.append(f)
-                except Exception:
-                    filtered.append(f)
-        return filtered
+        # Include all flights returned by endpoint within window
+        return flights
     except Exception as e:
         logger.info("RapidAPI aerodatabox access failed: airport=%s error=%s", airport_code, e)
         return []
