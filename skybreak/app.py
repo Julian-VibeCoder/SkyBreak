@@ -6,6 +6,10 @@ import sqlite3
 app = Flask(__name__, static_folder="/app/frontend/build/static", static_url_path="/static")
 DB_PATH = "/data/skybreak.db"
 
+init_db()
+from skybreak.scraper_job import start_scheduler
+start_scheduler()
+
 @app.route("/api/airports", methods=["GET"])
 def list_airports():
     conn = sqlite3.connect(DB_PATH)

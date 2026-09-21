@@ -24,5 +24,6 @@ COPY --from=builder /app/init_db.py .
 COPY --from=builder /app/frontend/build ./frontend/build
 
 EXPOSE 80
-ENV FLASK_APP=skybreak/app
+ENV FLASK_APP=skybreak/app DB_FILE=/data/skybreak.db
+RUN mkdir -p /data
 CMD ["python", "-m", "skybreak.app"]

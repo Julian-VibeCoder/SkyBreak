@@ -4,7 +4,7 @@ import sqlite3
 from apscheduler.schedulers.background import BackgroundScheduler
 from skybreak.flight_scraper import fetch_flights
 
-DB_PATH = "skybreak.db"
+DB_PATH = "/data/skybreak.db"
 
 def save_flights(airport_code, flights):
     conn = sqlite3.connect(DB_PATH, timeout=5)
