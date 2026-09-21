@@ -26,7 +26,7 @@ def save_flights(airport_code, flights):
             else:
                 arr_time = arr_time_raw or ""
             dest_icao = (arr.get("airport") or {}).get("icao") or arr.get("icao") or f.get("arrival_icao") or f.get("destination_icao") or ""
-            if not dest_icao:
+            if not dest_icao or str(dest_icao).upper() == str(airport_code).upper():
                 continue
             dest_name = (arr.get("airport") or {}).get("name") or arr.get("name") or ""
             # Direction: is this airport the departure airport of the flight?
