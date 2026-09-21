@@ -1,6 +1,6 @@
 import logging, sqlite3, re
 DB_PATH = "skybreak.db"
-logger = logging.getLogger(__name__)DB_PATH = "skybreak.db"
+logger = logging.getLogger(__name__)
 
 def init_db():
     conn = sqlite3.connect(DB_PATH, timeout=5)
