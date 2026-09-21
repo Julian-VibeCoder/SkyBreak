@@ -32,7 +32,7 @@ def save_flights(airport_code, flights):
             direction = "departure" if str(dep_airport_icao).upper() == str(airport_code).upper() else "arrival"
             conn.execute(
                 "INSERT OR IGNORE INTO flights (airport_icao, airport_name, destination_icao, destination_name, flight_direction, departure_time, year_ahead) VALUES (?, ?, ?, ?, ?, ?, ?)",
-                (airport_code, airport_code, dest_icao or airport_code, dest_name or "", direction, dep_time or arr_time, 365)
+                (airport_code, airport_code, dest_icao, dest_name, direction, dep_time or arr_time, 365)
             )
         except Exception:
             continue
