@@ -12,7 +12,7 @@ COPY frontend/ ./frontend/
 RUN cd frontend && npm install && npm run build
 
 # Final: nur Runtime
-FROM python:3.11-slim
+FROM python:3.11-slit
 RUN apt-get update && apt-get install -y --no-install-recommends libsqlite3-0 \
     && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
@@ -23,7 +23,6 @@ COPY --from=builder /app/init_db.py .
 COPY --from=builder /app/skybreak.db .
 COPY --from=builder /app/frontend/build ./frontend/build
 
-RUN pip install --no-cache-dir -r requirements.txt 2>/dev/null || true
 EXPOSE 80
 ENV FLASK_APP=skybreak/app
 CMD ["python", "-m", "flask", "run", "--host=0.0.0.0", "--port=80"]
