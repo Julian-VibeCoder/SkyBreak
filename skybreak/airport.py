@@ -6,6 +6,15 @@ def init_db():
     conn = sqlite3.connect(DB_PATH, timeout=5)
     conn.execute("CREATE TABLE IF NOT EXISTS airports (id INTEGER PRIMARY KEY AUTOINCREMENT, code TEXT UNIQUE NOT NULL, name TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)")
     conn.execute("CREATE TABLE IF NOT EXISTS flights (id INTEGER PRIMARY KEY AUTOINCREMENT, airport_icao TEXT, airport_name TEXT, destination_icao TEXT, destination_name TEXT, flight_direction TEXT, departure_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP)")
+    # Ensure columns exist for older DBs
+    try:
+        conn.execute("SELECT airport_name FROM flights LIMIT 1")
+    except sqlite3.OperationalError:
+        conn.execute("ALTER TABLE flights ADD COLUMN airport_name TEXT")
+    try:
+        conn.execute("SELECT destination_name FROM flights LIMIT 1")
+    except sqlite3.OperationalError:
+        conn.execute("ALTER TABLE flights ADD COLUMN destination_name TEXT")
     conn.commit()
     conn.close()
 
