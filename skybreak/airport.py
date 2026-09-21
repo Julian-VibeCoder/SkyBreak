@@ -32,12 +32,21 @@ def delete_airport(code: str) -> int:
     conn.execute("DELETE FROM flights WHERE airport_icao = ?", (code.upper(),))
     conn.commit()
     conn.close()
-    trigger_fetch_for_airport(code.upper())
     return cur.rowcount
 
 def trigger_fetch_for_airport(code: str):
+    import sqlite3
+    from datetime import datetime, timedelta
     from skybreak.flight_scraper import fetch_flights
     from skybreak.scraper_job import save_flights
+    conn = sqlite3.connect(DB_PATH, timeout=5)
+    # Check if any flights exist for this airport within the next 7 days
+    week_later = (datetime.utcnow() + timedelta(days=7)).strftime("%Y-%m-%d %H:%M:%S")
+    row = conn.execute("SELECT 1 FROM flights WHERE airport_icao = ? AND departure_time >= datetime('now') AND departure_time <= ? LIMIT 1", (code, week_later)).fetchone()
+    conn.close()
+    if row:
+        # Data already available for the next week; skip API request
+        return
     try:
         data = fetch_flights(code)
         if data:

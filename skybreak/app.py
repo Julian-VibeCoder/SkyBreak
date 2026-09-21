@@ -48,6 +48,13 @@ def list_flights():
     result = [{"airport_icao": r[0], "airport_name": r[1] or "", "destination_icao": r[2], "destination_name": r[3] or "", "direction": r[4]} for r in rows]
     return jsonify(result)
 
+
+@app.route("/api/settings/check", methods=["GET"])
+def settings_check():
+    from skybreak.airport import get_setting
+    key = get_setting("api_key")
+    return jsonify({"has_key": bool(key and key.strip())})
+
 if __name__ == "__main__":
     init_db()
     app.run(host="0.0.0.0", port=8000)

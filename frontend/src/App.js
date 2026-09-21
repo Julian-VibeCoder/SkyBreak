@@ -15,8 +15,12 @@ export default function App() {
   const [feedback, setFeedback] = useState('');
   const [flights, setFlights] = useState([]);
   const [flightDate, setFlightDate] = useState('');
+  const [hasApiKey, setHasApiKey] = useState(false);
 
   useEffect(() => {
+    fetch('/api/settings/check').then(r => r.json()).then(data => {
+      setHasApiKey(!!(data && data.has_key));
+    }).catch(() => setHasApiKey(false));
     fetch('/api/airports').then(r => r.json()).then(data => {
       const codes = Array.isArray(data) ? data.map(c => typeof c === 'string' ? c : c.code || c) : [];
       setList(codes);
@@ -209,21 +213,6 @@ export default function App() {
               borderRadius: 18, padding: 24, boxShadow: '0 10px 30px rgba(0,0,0,0.2)'
             }}>
               <h3 style={{ margin: '0 0 14px', fontSize: 18, fontWeight: 700, color: '#f8fafc' }}>My Trips</h3>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 14 }}>
-                {[
-                  { title: 'Tokyo Weekend', date: '15–18 Nov', status: 'Planned' },
-                  { title: 'Berlin Business', date: '02–04 Dec', status: 'Confirmed' },
-                ].map(t => (
-                  <div key={t.title} style={{
-                    background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.10)',
-                    borderRadius: 14, padding: 18
-                  }}>
-                    <div style={{ fontWeight: 700, color: '#f8fafc', fontSize: 16 }}>{t.title}</div>
-                    <div style={{ color: '#94a3b8', fontSize: 13, marginTop: 6 }}>{t.date}</div>
-                    <div style={{ marginTop: 10, display: 'inline-block', padding: '4px 10px', borderRadius: 8, background: t.status === 'Confirmed' ? 'rgba(74,222,128,0.15)' : 'rgba(56,189,248,0.15)', color: t.status === 'Confirmed' ? '#4ade80' : '#38bdf8', fontSize: 12, fontWeight: 600 }}>{t.status}</div>
-                  </div>
-                ))}
-              </div>
             </section>
           )}
 
@@ -233,22 +222,6 @@ export default function App() {
               borderRadius: 18, padding: 24, boxShadow: '0 10px 30px rgba(0,0,0,0.2)'
             }}>
               <h3 style={{ margin: '0 0 14px', fontSize: 18, fontWeight: 700, color: '#f8fafc' }}>Cost Overview</h3>
-              <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
-                {[
-                  { label: 'Flights', value: '€ 430', color: '#38bdf8' },
-                  { label: 'Hotels', value: '€ 890', color: '#818cf8' },
-                  { label: 'Transport', value: '€ 120', color: '#a78bfa' },
-                  { label: 'Food', value: '€ 310', color: '#f472b6' },
-                ].map(c => (
-                  <div key={c.label} style={{ flex: '1 1 160px', background: 'rgba(255,255,255,0.05)', borderRadius: 14, padding: 18, border: '1px solid rgba(255,255,255,0.08)' }}>
-                    <div style={{ fontSize: 13, color: '#94a3b8', marginBottom: 4 }}>{c.label}</div>
-                    <div style={{ fontSize: 22, fontWeight: 800, color: c.color }}>{c.value}</div>
-                  </div>
-                ))}
-              </div>
-              <div style={{ marginTop: 20, padding: 14, borderRadius: 12, background: 'rgba(255,255,255,0.03)', border: '1px dashed rgba(255,255,255,0.12)' }}>
-                <strong style={{ color: '#f8fafc' }}>Total estimated: € 1,750</strong> — Update after booking to see real costs.
-              </div>
             </section>
           )}
 
@@ -273,7 +246,8 @@ export default function App() {
                   alert('Failed to save');
                 }
               }} style={{ display: 'flex', gap: 10 }}>
-                <input id="apiKeyInput" type="password" placeholder="RapidAPI Key"
+                <input id="apiKeyInput" type="password" placeholder="RapidAPI Key" value={hasApiKey ? '••••••••' : ''}
+                  onChange={e => { if (!hasApiKey || e.target.value === '') setHasApiKey(false); else setHasApiKey(true); }}
                   style={{
                     flex: '1 1 240px', padding: '10px 14px', borderRadius: 10,
                     border: '1px solid rgba(255,255,255,0.15)', background: 'rgba(255,255,255,0.06)',

@@ -1,3 +1,5 @@
+from datetime import datetime, timedelta
+import logging
 import sqlite3
 from apscheduler.schedulers.background import BackgroundScheduler
 from skybreak.flight_scraper import fetch_flights
@@ -24,16 +26,26 @@ def save_flights(airport_code, flights):
     conn.close()
 
 def scrape_all_airports():
+    import logging, sqlite3
+    logger = logging.getLogger(__name__)
     conn = sqlite3.connect(DB_PATH, timeout=5)
     rows = conn.execute("SELECT code FROM airports").fetchall()
     conn.close()
     for (code,) in rows:
         try:
+            conn_check = sqlite3.connect(DB_PATH, timeout=5)
+            week_later = (datetime.utcnow() + timedelta(days=7)).strftime("%Y-%m-%d %H:%M:%S")
+            row = conn_check.execute("SELECT 1 FROM flights WHERE airport_icao = ? AND departure_time >= datetime('now') AND departure_time <= ? LIMIT 1", (code, week_later)).fetchone()
+            conn_check.close()
+            if row:
+                logger.info("Skipping %s: first-week data already present", code)
+                continue
             data = fetch_flights(code)
             if data:
                 save_flights(code, data)
-        except Exception:
-            # Graceful: don't crash scheduler on individual airport failure
+                logger.info("Batch fetched %d flights for %s", len(data), code)
+        except Exception as e:
+            logger.info("Batch fetch failed for %s: %s", code, e)
             pass
 
 def start_scheduler():
@@ -42,6 +54,8 @@ def start_scheduler():
         interval = int(get_setting("fetch_interval_minutes") or 30)
     except Exception:
         interval = 30
+    import logging
+    logging.getLogger(__name__).info("Scheduler interval set to %s minutes", interval)
     scheduler = BackgroundScheduler()
     scheduler.add_job(scrape_all_airports, "interval", minutes=interval)
     scheduler.add_job(clean_old_flights, "interval", minutes=interval)
