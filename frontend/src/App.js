@@ -208,7 +208,7 @@ export default function App() {
                             {arr.map(a => <tr key={a.id || a.destination_icao + a.departure_time} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
                               <td style={{ padding: '4px 8px' }}>{a.destination_name ? a.destination_name + ' (' + a.destination_icao + ')' : a.destination_icao}</td>
                               <td style={{ padding: '4px 8px', fontWeight: 600 }}>{a.flight_number || '-'}</td>
-                              <td style={{ padding: '4px 8px' }}>{a.departure_time ? (() => { const d = new Date(a.departure_time.endsWith("Z") ? a.departure_time : a.departure_time + (a.departure_time.includes("+") || a.departure_time.includes("Z") ? "" : "+00:00")); return d.toLocaleString('de-DE', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit', timeZoneName: 'short' }) + ' (UTC→local)'; })() : '-'}</td>
+                              <td style={{ padding: '4px 8px' }}>{a.departure_time ? (() => { const ts = a.departure_time; const dtLocal = new Date(ts.endsWith("Z") ? ts : ts + (ts.includes("+") || ts.includes("Z") ? "" : "+00:00")); return dtLocal.toLocaleString('de-DE', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit', timeZoneName: 'short' }) + ' (UTC→local)'; })() : '-'}</td>
                             </tr>)}
                           </tbody>
                         </table>
@@ -222,7 +222,7 @@ export default function App() {
                             {dep.map(d => <tr key={d.id || d.destination_icao + d.departure_time} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
                               <td style={{ padding: '4px 8px' }}>{d.destination_name ? d.destination_name + ' (' + d.destination_icao + ')' : d.destination_icao}</td>
                               <td style={{ padding: '4px 8px', fontWeight: 600 }}>{d.flight_number || '-'}</td>
-                              <td style={{ padding: '4px 8px' }}>{d.departure_time ? (() => { const d = new Date(d.departure_time.endsWith("Z") ? d.departure_time : d.departure_time + (d.departure_time.includes("+") || d.departure_time.includes("Z") ? "" : "+00:00")); return d.toLocaleString('de-DE', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit', timeZoneName: 'short' }) + ' (UTC→local)'; })() : '-'}</td>
+                              <td style={{ padding: '4px 8px' }}>{d.departure_time ? (() => { const ts = d.departure_time; const dtLocal = new Date(ts.endsWith("Z") ? ts : ts + (ts.includes("+") || ts.includes("Z") ? "" : "+00:00")); return dtLocal.toLocaleString('de-DE', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit', timeZoneName: 'short' }) + ' (UTC→local)'; })() : '-'}</td>
                             </tr>)}
                           </tbody>
                         </table>
