@@ -5,6 +5,7 @@ from skybreak.airport import add_airport, delete_airport, validate_iata, init_db
 import sqlite3
 app = Flask(__name__, static_folder="/app/frontend/build/static", static_url_path="/static")
 DB_PATH = "skybreak.db"
+
 @app.route("/api/airports", methods=["GET"])
 def list_airports():
     conn = sqlite3.connect(DB_PATH)
@@ -61,7 +62,7 @@ if __name__ == "__main__":
     init_db()
     from skybreak.scraper_job import start_scheduler
     start_scheduler()
-    app.run(host="0.0.0.0", port=8000)
+    app.run(host="0.0.0.0", port=80)
 
 @app.route("/api/settings", methods=["GET", "POST"])
 def settings():
@@ -76,3 +77,9 @@ def settings():
         rows = conn.execute("SELECT key, value FROM settings").fetchall()
         conn.close()
         return jsonify({r[0]: r[1] for r in rows})
+
+if __name__ == "__main__":
+    init_db()
+    from skybreak.scraper_job import start_scheduler
+    start_scheduler()
+    app.run(host="0.0.0.0", port=80)

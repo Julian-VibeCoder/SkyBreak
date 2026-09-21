@@ -25,4 +25,4 @@ COPY --from=builder /app/frontend/build ./frontend/build
 
 EXPOSE 80
 ENV FLASK_APP=skybreak/app
-CMD ["python", "-m", "flask", "run", "--host=0.0.0.0", "--port=80"]
+CMD ["python", "-m", "skybreak.app"]
