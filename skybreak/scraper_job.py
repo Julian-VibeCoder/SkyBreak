@@ -38,7 +38,7 @@ def scrape_all_airports():
             row = conn_check.execute("SELECT 1 FROM flights WHERE airport_icao = ? AND departure_time >= datetime('now') AND departure_time <= ? LIMIT 1", (code, week_later)).fetchone()
             conn_check.close()
             if row:
-                logger.info("Skipping %s: first-week data already present", code)
+                logger.info("Skipping API fetch for %s: first-week data already present in DB", code)
                 continue
             data = fetch_flights(code)
             if data:
