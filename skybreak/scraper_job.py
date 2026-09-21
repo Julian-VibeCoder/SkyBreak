@@ -6,12 +6,20 @@ from skybreak.flight_scraper import fetch_flights
 
 DB_PATH = "/data/skybreak.db"
 
+def get_latest_flight_time(airport_code):
+    conn = sqlite3.connect(DB_PATH, timeout=5)
+    row = conn.execute(
+        "SELECT departure_time FROM flights WHERE airport_icao = ? ORDER BY departure_time DESC LIMIT 1",
+        (airport_code,)
+    ).fetchone()
+    conn.close()
+    return row[0] if row else None
+
 def save_flights(airport_code, flights):
     conn = sqlite3.connect(DB_PATH, timeout=5)
     conn.execute("CREATE TABLE IF NOT EXISTS flights (id INTEGER PRIMARY KEY AUTOINCREMENT, airport_icao TEXT, airport_name TEXT, destination_icao TEXT, destination_name TEXT, flight_direction TEXT, departure_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP, year_ahead INTEGER DEFAULT 365, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)")
     for f in flights:
         try:
-            # RapidAPI nested format
             dep = f.get("departure") or {}
             arr = f.get("arrival") or {}
             dep_time_raw = dep.get("scheduledTime") or dep.get("scheduledTime", {})
@@ -19,7 +27,6 @@ def save_flights(airport_code, flights):
                 dep_time = dep_time_raw.get("utc") or dep_time_raw.get("local", "")
             else:
                 dep_time = dep_time_raw or ""
-            # For arrival-based flows, also allow arrival time if departure missing
             arr_time_raw = arr.get("scheduledTime") or arr.get("scheduledTime", {})
             if isinstance(arr_time_raw, dict):
                 arr_time = arr_time_raw.get("utc") or arr_time_raw.get("local", "")
@@ -33,13 +40,19 @@ def save_flights(airport_code, flights):
                 if not dest_icao or str(dest_icao).upper() == str(airport_code).upper():
                     continue
             else:
-                # arrival at airport_code: source (shown as "From" in UI) = departure airport
                 dest_icao = dep_airport_icao
                 dest_name = (dep.get("airport") or {}).get("name") or dep.get("name") or ""
                 if not dest_icao or str(dest_icao).upper() == str(airport_code).upper():
                     continue
             from skybreak.airport_lookup import fetch_airport_name
             airport_name = fetch_airport_name(airport_code) or airport_code
+            # Avoid duplicates: check if exact departure+airport+direction+destination exists
+            existing = conn.execute(
+                "SELECT 1 FROM flights WHERE airport_icao = ? AND destination_icao = ? AND flight_direction = ? AND departure_time = ? LIMIT 1",
+                (airport_code, dest_icao, direction, dep_time or arr_time)
+            ).fetchone()
+            if existing:
+                continue
             conn.execute(
                 "INSERT OR IGNORE INTO flights (airport_icao, airport_name, destination_icao, destination_name, flight_direction, departure_time, year_ahead) VALUES (?, ?, ?, ?, ?, ?, ?)",
                 (airport_code, airport_name, dest_icao, dest_name, direction, dep_time or arr_time, 365)
@@ -57,17 +70,51 @@ def scrape_all_airports():
     conn.close()
     for (code,) in rows:
         try:
-            conn_check = sqlite3.connect(DB_PATH, timeout=5)
-            week_later = (datetime.utcnow() + timedelta(days=7)).strftime("%Y-%m-%d %H:%M:%S")
-            row = conn_check.execute("SELECT 1 FROM flights WHERE airport_icao = ? AND departure_time >= datetime('now') AND departure_time <= ? LIMIT 1", (code, week_later)).fetchone()
-            conn_check.close()
-            if row:
-                logger.info("Skipping API fetch for %s: first-week data already present in DB", code)
-                continue
-            data = fetch_flights(code)
-            if data:
-                save_flights(code, data)
-                logger.info("Batch fetched %d flights for %s", len(data), code)
+            latest_str = get_latest_flight_time(code)
+            if latest_str:
+                start_str = (datetime.fromisoformat(latest_str.replace("Z", "+00:00")).replace(tzinfo=None) - timedelta(hours=6)).strftime("%Y-%m-%dT%H:%M")
+            else:
+                start_str = datetime.utcnow().strftime("%Y-%m-%dT%H:%M")
+            end_str = (datetime.utcnow() + timedelta(hours=6)).strftime("%Y-%m-%dT%H:%M")
+            # Keep fetching next 6h windows until rate limit stops us
+            wait_time = 30 * 60
+            max_attempts = 10
+            attempts = 0
+            fetched_any = False
+            while attempts < max_attempts:
+                attempts += 1
+                try:
+                    data = fetch_flights(code, start_time_str=start_str, end_time_str=end_str)
+                    if data:
+                        save_flights(code, data)
+                        fetched_any = True
+                        logger.info("Batch fetched %d flights for %s (window %s to %s)", len(data), code, start_str, end_str)
+                    # After a successful call, advance window by 6h for next request
+                    try:
+                        end_dt = datetime.fromisoformat(end_str.replace("Z", "+00:00"))
+                        if end_dt.tzinfo is not None:
+                            end_dt = end_dt.replace(tzinfo=None)
+                        start_dt = end_dt + timedelta(hours=6)
+                        start_str = start_dt.strftime("%Y-%m-%dT%H:%M")
+                        end_dt = start_dt + timedelta(hours=6)
+                        end_str = end_dt.strftime("%Y-%m-%dT%H:%M")
+                    except Exception:
+                        pass
+                    # If no data returned but call succeeded, break (nothing more in range?)
+                    # Actually keep fetching until rate limit. Continue.
+                    if not data:
+                        # No flights in this window; still try next window (may be empty gaps)
+                        pass
+                except Exception as e:
+                    logger.info("Batch fetch failed for %s: %s", code, e)
+                    # Rate limit may occur; apply exponential wait
+                    logger.info("Waiting %d seconds before retry for %s", wait_time, code)
+                    import time
+                    time.sleep(wait_time)
+                    wait_time *= 2
+                    break  # Exit inner loop, schedule will retry next run
+            if not fetched_any:
+                logger.info("No new flights fetched for %s in this run", code)
         except Exception as e:
             logger.info("Batch fetch failed for %s: %s", code, e)
             pass
