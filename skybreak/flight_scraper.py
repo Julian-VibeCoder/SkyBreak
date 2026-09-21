@@ -18,8 +18,11 @@ def fetch_flights(airport_code, year_ahead=None):
         except Exception:
             year_ahead = 2
         year_ahead = min(year_ahead, 365)
+    api_key = get_setting("api_key") or ""
+    if not api_key:
+        return []
     headers = {
-        "X-RapidAPI-Key": get_setting("api_key") or "",
+        "X-RapidAPI-Key": api_key,
         "X-RapidAPI-Host": "aerodatabox.p.rapidapi.com"
     }
     params = {"depIata": airport_code, "arrIata": airport_code, "withLeg": "true", "withCancelled": "false"}
