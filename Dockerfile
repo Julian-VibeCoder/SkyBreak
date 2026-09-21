@@ -24,6 +24,6 @@ COPY --from=builder /app/skybreak.db .
 COPY --from=builder /app/frontend/build ./frontend/build
 
 RUN pip install --no-cache-dir -r requirements.txt 2>/dev/null || true
-EXPOSE 8000
+EXPOSE 80
 ENV FLASK_APP=skybreak/app
-CMD ["python", "-m", "flask", "run", "--host=0.0.0.0", "--port=8000"]
+CMD ["python", "-m", "flask", "run", "--host=0.0.0.0", "--port=80"]
