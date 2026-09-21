@@ -18,7 +18,6 @@ jobs:
       actions: read
       contents: read
       packages: write
-      actions: write
 
     steps:
       - name: Checkout repository
