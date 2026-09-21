@@ -71,8 +71,14 @@ def trigger_fetch_for_airport(code: str):
             latest_dt = latest_dt.replace(tzinfo=None)
         start_dt = latest_dt - timedelta(hours=6)
     else:
-        start_dt = datetime.utcnow()
-    target_end = start_dt + timedelta(days=365)
+                start_dt = datetime.utcnow()
+    max_days_raw = get_setting("fetch_max_days")
+    try:
+        max_days = int(max_days_raw)
+    except Exception:
+        max_days = 7
+    max_days = max(1, min(max_days, 365))
+    target_end = start_dt + timedelta(days=max_days)
     wait_time = 0  # start directly until first rate limit hits; then apply backoff
     current_start = start_dt
     fetched_any = False

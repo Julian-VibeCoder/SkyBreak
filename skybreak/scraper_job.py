@@ -80,6 +80,12 @@ def scrape_all_airports():
     for (code,) in rows:
         try:
             # If there are missing flights (data not fetched completely for next 365 days) fetch until api restricts access due to rate limit
+            max_days_raw = get_setting("fetch_max_days")
+            try:
+                max_days = int(max_days_raw)
+            except Exception:
+                max_days = 7
+            max_days = max(1, min(max_days, 365))
             conn2 = sqlite3.connect(DB_PATH, timeout=5)
             row_max = conn2.execute("SELECT MAX(departure_time) FROM flights WHERE airport_icao = ?", (code,)).fetchone()
             conn2.close()
@@ -94,7 +100,7 @@ def scrape_all_airports():
                 start_dt = datetime.utcnow()
             # We are still only able to fix 6 hours with a single api call
             # Fetch continuously until we cover 365 days ahead or rate limit stops us
-            target_end = start_dt + timedelta(days=365)
+            target_end = start_dt + timedelta(days=max_days)
             wait_time = 0  # start directly until first rate limit hits; then apply backoff
             # We must fetch all windows continuously; when successful, next 6h directly after previous
             current_start = start_dt
