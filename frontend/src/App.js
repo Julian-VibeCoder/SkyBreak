@@ -147,6 +147,7 @@ export default function App() {
                       flex: '1 1 120px', padding: '10px 14px', borderRadius: 10, border: '1px solid rgba(255,255,255,0.15)',
                       background: 'rgba(255,255,255,0.06)', color: '#f8fafc', fontSize: 15, outline: 'none'
                     }}/>
+                <input id="fetchMaxDays" type="number" min="1" max="365" defaultValue="7" placeholder="Max fetch days (1-365)" style={{ padding: "10px 14px", borderRadius: 10, border: "1px solid rgba(255,255,255,0.15)", background: "rgba(255,255,255,0.06)", color: "#f8fafc", fontSize: 15, width: 140, outline: "none" }} />
                   <button type="submit" style={{
                     padding: '10px 18px', borderRadius: 10, border: 'none', background: 'linear-gradient(135deg, #38bdf8, #818cf8)',
                     color: '#0f172a', fontWeight: 700, fontSize: 15, cursor: 'pointer', boxShadow: '0 4px 14px rgba(56,189,248,0.35)'
@@ -267,7 +268,7 @@ export default function App() {
                 const res = await fetch('/api/settings', {
                   method: 'POST',
                   headers: {'Content-Type':'application/json'},
-                  body: JSON.stringify({api_key: key, fetch_interval_minutes: document.getElementById('fetchInterval')?.value || 30, fetch_days_ahead: document.getElementById('fetchDaysAhead')?.value || 2})
+                  body: JSON.stringify({api_key: key, fetch_interval_minutes: document.getElementById('fetchInterval')?.value || 30, fetch_days_ahead: document.getElementById('fetchDaysAhead')?.value || 2, fetch_max_days: document.getElementById('fetchMaxDays')?.value || 7})
                 });
                 if (res.ok) {
                   alert('API key saved');
@@ -282,6 +283,7 @@ export default function App() {
                     border: '1px solid rgba(255,255,255,0.15)', background: 'rgba(255,255,255,0.06)',
                     color: '#f8fafc', fontSize: 15, outline: 'none'
                   }}/>
+                <input id="fetchMaxDays" type="number" min="1" max="365" defaultValue="7" placeholder="Max fetch days (1-365)" style={{ padding: "10px 14px", borderRadius: 10, border: "1px solid rgba(255,255,255,0.15)", background: "rgba(255,255,255,0.06)", color: "#f8fafc", fontSize: 15, width: 140, outline: "none" }} />
                 <button type="submit" style={{
                   padding: '10px 18px', borderRadius: 10, border: 'none',
                   background: 'linear-gradient(135deg, #38bdf8, #818cf8)',
