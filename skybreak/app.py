@@ -1,3 +1,5 @@
+import logging
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 from flask import Flask, request, jsonify, send_from_directory
 from skybreak.airport import add_airport, delete_airport, validate_iata, init_db
 import sqlite3
