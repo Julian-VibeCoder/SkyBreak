@@ -265,7 +265,7 @@ export default function App() {
                 const res = await fetch('/api/settings', {
                   method: 'POST',
                   headers: {'Content-Type':'application/json'},
-                  body: JSON.stringify({api_key: key})
+                  body: JSON.stringify({api_key: key, fetch_interval_minutes: document.getElementById('fetchInterval')?.value || 30, fetch_days_ahead: document.getElementById('fetchDaysAhead')?.value || 2})
                 });
                 if (res.ok) {
                   alert('API key saved');

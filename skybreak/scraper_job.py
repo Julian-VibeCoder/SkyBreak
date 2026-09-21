@@ -37,6 +37,21 @@ def scrape_all_airports():
             pass
 
 def start_scheduler():
+    from skybreak.airport import get_setting
+    try:
+        interval = int(get_setting("fetch_interval_minutes") or 30)
+    except Exception:
+        interval = 30
     scheduler = BackgroundScheduler()
-    scheduler.add_job(scrape_all_airports, 'interval', minutes=30)
+    scheduler.add_job(scrape_all_airports, "interval", minutes=interval)
+    scheduler.add_job(clean_old_flights, "interval", minutes=interval)
     scheduler.start()
+
+def clean_old_flights():
+    import sqlite3
+    conn = sqlite3.connect(DB_PATH, timeout=5)
+    conn.execute("DELETE FROM flights WHERE departure_time < datetime('now')")
+    conn.commit()
+    deleted = conn.total_changes
+    conn.close()
+    return deleted

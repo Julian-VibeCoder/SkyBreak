@@ -11,7 +11,13 @@ BASE_URL = "https://aerodatabox.p.rapidapi.com/flights"
     retry=retry_if_exception_type((requests.exceptions.RequestException,)),
     reraise=True
 )
-def fetch_flights(airport_code, year_ahead=365):
+def fetch_flights(airport_code, year_ahead=None):
+    if year_ahead is None:
+        try:
+            year_ahead = int(get_setting("fetch_days_ahead"))
+        except Exception:
+            year_ahead = 2
+        year_ahead = min(year_ahead, 365)
     headers = {
         "X-RapidAPI-Key": get_setting("api_key") or "",
         "X-RapidAPI-Host": "aerodatabox.p.rapidapi.com"
