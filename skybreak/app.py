@@ -1,6 +1,7 @@
 import logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 from flask import Flask, request, jsonify, send_from_directory
+from skybreak.airport_lookup import fetch_airport_name
 from skybreak.airport import add_airport, delete_airport, validate_iata, init_db
 import sqlite3
 app = Flask(__name__, static_folder="/app/frontend/build/static", static_url_path="/static")
@@ -41,7 +42,7 @@ def index():
 def list_flights():
     airport = request.args.get("airport", "").strip().upper()
     conn = sqlite3.connect(DB_PATH)
-    sql = "SELECT airport_icao, airport_name, destination_icao, destination_name, flight_direction FROM flights WHERE departure_time >= datetime('now') AND departure_time <= datetime('now', '+365 days')"
+    sql = "SELECT airport_icao, airport_name, destination_icao, destination_name, flight_direction, departure_time FROM flights WHERE departure_time >= datetime('now') AND departure_time <= datetime('now', '+365 days')"
     params = []
     if airport:
         sql += " AND airport_icao = ?"
@@ -52,7 +53,20 @@ def list_flights():
         params.append(date_filter)
     rows = conn.execute(sql, params).fetchall()
     conn.close()
-    result = [{"airport_icao": r[0], "airport_name": r[1] or "", "destination_icao": r[2], "destination_name": r[3] or "", "direction": r[4]} for r in rows]
+    result = []
+    for r in rows:
+        airport_icao = r[0]
+        destination_icao = r[2]
+        airport_name = fetch_airport_name(airport_icao) or r[1] or ""
+        destination_name = fetch_airport_name(destination_icao) or r[3] or ""
+        result.append({
+            "airport_icao": airport_icao,
+            "airport_name": airport_name,
+            "destination_icao": destination_icao,
+            "destination_name": destination_name,
+            "direction": r[4],
+            "departure_time": r[5]
+        })
     return jsonify(result)
 
 

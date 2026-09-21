@@ -192,19 +192,34 @@ export default function App() {
                     <button onClick={() => toggle(airport)} style={{ width: '100%', textAlign: 'left', padding: '12px 16px', borderRadius: 10, border: '1px solid rgba(255,255,255,0.08)', background: 'rgba(255,255,255,0.06)', color: '#f8fafc', fontWeight: 700, fontSize: 16, cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       {airport} <span style={{ color: '#94a3b8', fontWeight: 500 }}>✈️</span>
                     </button>
-                    <div style={{ marginTop: 8, padding: 8 }}>{expanded[airport] ? (<div><div><strong style={{ color: '#4ade80', fontSize: 13 }}>Arrivals</strong>
+                    <div style={{ marginTop: 8, padding: 8 }}>{expanded[airport] ? (<div>
+                      <div>
+                        <strong style={{ color: '#4ade80', fontSize: 13 }}>Arrivals ({arr.length})</strong>
                         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, marginTop: 6 }}>
                           <thead><tr style={{ borderBottom: '1px solid rgba(255,255,255,0.1)' }}><th style={{ textAlign: 'left', padding: '4px 8px', color: '#94a3b8' }}>From</th><th style={{ textAlign: 'left', padding: '4px 8px', color: '#94a3b8' }}>Time</th></tr></thead>
-                          <tbody>{arr.map(a => <tr key={a.destination_icao} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}><td style={{ padding: '4px 8px' }}>{a.destination_icao}</td><td style={{ padding: '4px 8px' }}>{a.departure_time}</td></tr>)}</tbody>
+                          <tbody>
+                            {arr.length === 0 && <tr><td colSpan="2" style={{ padding: '4px 8px', color: '#94a3b8' }}>No arrivals</td></tr>}
+                            {arr.map(a => <tr key={a.id || a.destination_icao + a.departure_time} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                              <td style={{ padding: '4px 8px' }}>{a.destination_name ? a.destination_name + ' (' + a.destination_icao + ')' : a.destination_icao}</td>
+                              <td style={{ padding: '4px 8px' }}>{a.departure_time ? new Date(a.departure_time).toLocaleString('de-DE', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' }) : '-'}</td>
+                            </tr>)}
+                          </tbody>
                         </table>
                       </div>
                       <div style={{ marginTop: 10 }}>
-                        <strong style={{ color: '#38bdf8', fontSize: 13 }}>Departures</strong>
+                        <strong style={{ color: '#38bdf8', fontSize: 13 }}>Departures ({dep.length})</strong>
                         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, marginTop: 6 }}>
                           <thead><tr style={{ borderBottom: '1px solid rgba(255,255,255,0.1)' }}><th style={{ textAlign: 'left', padding: '4px 8px', color: '#94a3b8' }}>To</th><th style={{ textAlign: 'left', padding: '4px 8px', color: '#94a3b8' }}>Time</th></tr></thead>
-                          <tbody>{dep.map(d => <tr key={d.destination_icao} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}><td style={{ padding: '4px 8px' }}>{d.destination_icao}</td><td style={{ padding: '4px 8px' }}>{d.departure_time}</td></tr>)}</tbody>
+                          <tbody>
+                            {dep.length === 0 && <tr><td colSpan="2" style={{ padding: '4px 8px', color: '#94a3b8' }}>No departures</td></tr>}
+                            {dep.map(d => <tr key={d.id || d.destination_icao + d.departure_time} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                              <td style={{ padding: '4px 8px' }}>{d.destination_name ? d.destination_name + ' (' + d.destination_icao + ')' : d.destination_icao}</td>
+                              <td style={{ padding: '4px 8px' }}>{d.departure_time ? new Date(d.departure_time).toLocaleString('de-DE', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' }) : '-'}</td>
+                            </tr>)}
+                          </tbody>
                         </table>
-                      </div></div>) : <span style={{ color: "#94a3b8", fontSize: 13 }}>Click to expand</span>}
+                      </div>
+                    </div>) : <span style={{ color: "#94a3b8", fontSize: 13 }}>Click to expand</span>}
                     </div>
                   </div>
                 );
