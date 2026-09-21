@@ -51,3 +51,17 @@ def list_flights():
 if __name__ == "__main__":
     init_db()
     app.run(host="0.0.0.0", port=8000)
+
+@app.route("/api/settings", methods=["GET", "POST"])
+def settings():
+    from skybreak.airport import get_setting, set_setting
+    if request.method == "POST":
+        data = request.get_json(force=True)
+        for k, v in data.items():
+            set_setting(str(k), str(v))
+        return jsonify({"updated": True})
+    else:
+        conn = sqlite3.connect(DB_PATH)
+        rows = conn.execute("SELECT key, value FROM settings").fetchall()
+        conn.close()
+        return jsonify({r[0]: r[1] for r in rows})
