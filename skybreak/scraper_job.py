@@ -17,7 +17,7 @@ def get_latest_flight_time(airport_code):
 
 def save_flights(airport_code, flights):
     conn = sqlite3.connect(DB_PATH, timeout=5)
-                conn.execute("CREATE TABLE IF NOT EXISTS flights (id INTEGER PRIMARY KEY AUTOINCREMENT, airport_icao TEXT, airport_name TEXT, destination_icao TEXT, destination_name TEXT, flight_direction TEXT, departure_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP, flight_number TEXT, year_ahead INTEGER DEFAULT 365, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)")
+    conn.execute("CREATE TABLE IF NOT EXISTS flights (id INTEGER PRIMARY KEY AUTOINCREMENT, airport_icao TEXT, airport_name TEXT, destination_icao TEXT, destination_name TEXT, flight_direction TEXT, departure_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP, flight_number TEXT, year_ahead INTEGER DEFAULT 365, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)")
     for f in flights:
         try:
             dep = f.get("departure") or {}
@@ -55,7 +55,7 @@ def save_flights(airport_code, flights):
             if existing:
                 continue
             conn.execute(
-                "INSERT OR IGNORE INTO flights (airport_icao, airport_name, destination_icao, destination_name, flight_direction, departure_time, year_ahead) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                "INSERT OR IGNORE INTO flights (airport_icao, airport_name, destination_icao, destination_name, flight_direction, departure_time, flight_number, year_ahead) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                 (airport_code, airport_name, dest_icao, dest_name, direction, dep_time or arr_time, 365)
             )
         except Exception:
