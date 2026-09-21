@@ -27,10 +27,13 @@ def fetch_flights(airport_code, year_ahead=None):
         "X-RapidAPI-Key": api_key,
         "X-RapidAPI-Host": "aerodatabox.p.rapidapi.com"
     }
-    params = {"withLeg":"true","direction":"Both","withCodeshared":"true","withLocation":"false"}
+    start_str = datetime.utcnow().strftime("%Y-%m-%dT%H:%M")
+    end_str = (datetime.utcnow() + timedelta(hours=6)).strftime("%Y-%m-%dT%H:%M")
+    url = f"{BASE_URL}/{airport_code}/{start_str}/{end_str}"
+    params = {"withLeg":"true","direction":"Both","withCodeshared":"true","withLocation":"false","withCancelled":"false","withCargo":"false","withPrivate":"false"}
     try:
-        logger.info("RapidAPI aerodatabox access: airport=%s url=%s", airport_code, BASE_URL)
-        res = requests.get(BASE_URL, headers=headers, params=params, timeout=10)
+        logger.info("RapidAPI aerodatabox access: airport=%s url=%s", airport_code, url)
+        res = requests.get(url, headers=headers, params=params, timeout=10)
         if res.status_code in (429, 503):
             res.raise_for_status()
         logger.info("RapidAPI aerodatabox response: status=%s airport=%s", res.status_code, airport_code)
