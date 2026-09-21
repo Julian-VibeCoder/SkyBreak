@@ -1,5 +1,14 @@
 import React, { useEffect, useState } from 'react';
+
+const NAV = [
+  { key: 'airports', label: 'Airports', icon: '✈️' },
+  { key: 'flights', label: 'Flights', icon: '🛫' },
+  { key: 'trips', label: 'Trips', icon: '🧳' },
+  { key: 'costs', label: 'Costs', icon: '💰' },
+];
+
 export default function App() {
+  const [tab, setTab] = useState('airports');
   const [code, setCode] = useState('');
   const [list, setList] = useState([]);
   const [feedback, setFeedback] = useState('');
@@ -45,21 +54,203 @@ export default function App() {
   };
 
   return (
-    <div style={{fontFamily:'sans-serif',padding:20}}>
-      <h1>SkyBreak — Airports</h1>
-      <form onSubmit={submit}>
-        <input id="codeInput" value={code} maxLength={3} placeholder="LHR" onChange={e => setCode(e.target.value.toUpperCase())}/>
-        <button type="submit">Speichern</button>
-      </form>
-      <p>{feedback}</p>
-      <ul>
-        {list.map(c => <li key={c}>{c} <button onClick={() => removeAirport(c)}>×</button></li>)}
-      </ul>
-      <h2>Abflüge & Ankünfte</h2>
-      <input type="date" value={flightDate} onChange={e => { setFlightDate(e.target.value); loadFlights(); }} />
-      <ul>
-        {flights.map(f => <li key={f.airport_icao+f.destination_icao}>{f.airport_icao} ({f.airport_name||''}) → {f.destination_icao} ({f.destination_name||''}) | {f.direction}</li>)}
-      </ul>
+    <div style={{
+      display: 'flex', minHeight: '100vh', fontFamily: "'Inter', 'Segoe UI', system-ui, sans-serif",
+      background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)', color: '#f1f5f9'
+    }}>
+      <aside style={{
+        width: 260, flexShrink: 0, background: 'rgba(15,23,42,0.85)',
+        backdropFilter: 'blur(12px)', borderRight: '1px solid rgba(255,255,255,0.06)',
+        padding: '28px 20px', display: 'flex', flexDirection: 'column', gap: 10,
+        boxShadow: '4px 0 30px rgba(0,0,0,0.25)'
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 28 }}>
+          <div style={{
+            width: 48, height: 48, borderRadius: 14,
+            background: 'linear-gradient(135deg, #38bdf8, #818cf8)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: 22, boxShadow: '0 4px 15px rgba(56,189,248,0.35)'
+          }}>✈️</div>
+          <div>
+            <h1 style={{ margin: 0, fontSize: 20, letterSpacing: '-0.5px', fontWeight: 800, color: '#f8fafc' }}>SkyBreak</h1>
+            <span style={{ fontSize: 11, color: '#94a3b8', fontWeight: 500 }}>Travel Dashboard</span>
+          </div>
+        </div>
+
+        <nav style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          {NAV.map(n => (
+            <button key={n.key} onClick={() => setTab(n.key)} style={{
+              textAlign: 'left', padding: '12px 14px', borderRadius: 12, border: 'none',
+              background: tab === n.key ? 'rgba(56,189,248,0.15)' : 'transparent',
+              color: tab === n.key ? '#38bdf8' : '#cbd5e1', fontWeight: 600, fontSize: 15,
+              cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 12,
+              transition: 'all 0.2s ease', boxShadow: tab === n.key ? 'inset 0 0 0 1px rgba(56,189,248,0.35)' : 'none'
+            }}>
+              <span style={{ fontSize: 18 }}>{n.icon}</span>
+              {n.label}
+            </button>
+          ))}
+        </nav>
+
+        <div style={{ marginTop: 'auto', paddingTop: 20, borderTop: '1px solid rgba(255,255,255,0.08)' }}>
+          <div style={{ fontSize: 12, color: '#64748b', lineHeight: 1.5 }}>
+            SkyBreak v1.0 — Modern travel analytics
+          </div>
+        </div>
+      </aside>
+
+      <main style={{ flex: 1, padding: 36, overflow: 'auto' }}>
+        <header style={{ marginBottom: 28, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div>
+            <h2 style={{ margin: 0, fontSize: 28, fontWeight: 800, letterSpacing: '-0.8px' }}>
+              {NAV.find(n => n.key === tab)?.label}
+            </h2>
+            <p style={{ margin: '6px 0 0', color: '#94a3b8', fontSize: 14 }}>
+              {tab === 'airports' && 'Manage airport codes and view departures / arrivals.'}
+              {tab === 'flights' && 'Browse flight schedules by airport and date.'}
+              {tab === 'trips' && 'Plan trips and view itineraries.'}
+              {tab === 'costs' && 'Track travel expenses and budget overview.'}
+            </p>
+          </div>
+          <div style={{
+            padding: '10px 18px', borderRadius: 10, background: 'rgba(255,255,255,0.05)',
+            border: '1px solid rgba(255,255,255,0.08)', fontSize: 13, fontWeight: 600, color: '#e2e8f0'
+          }}>
+            {new Date().toLocaleDateString('de-DE', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+          </div>
+        </header>
+
+        <div style={{ display: 'grid', gap: 24, gridTemplateColumns: tab === 'airports' ? '1fr 1fr' : '1fr', alignItems: 'start' }}>
+          {tab === 'airports' && (
+            <>
+              <section style={{
+                background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)',
+                borderRadius: 18, padding: 24, boxShadow: '0 10px 30px rgba(0,0,0,0.2)'
+              }}>
+                <h3 style={{ margin: '0 0 14px', fontSize: 18, fontWeight: 700, color: '#f8fafc' }}>Add Airport</h3>
+                <form onSubmit={submit} style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                  <input id="codeInput" value={code} maxLength={3} placeholder="LHR"
+                    onChange={e => setCode(e.target.value.toUpperCase())}
+                    style={{
+                      flex: '1 1 120px', padding: '10px 14px', borderRadius: 10, border: '1px solid rgba(255,255,255,0.15)',
+                      background: 'rgba(255,255,255,0.06)', color: '#f8fafc', fontSize: 15, outline: 'none'
+                    }}/>
+                  <button type="submit" style={{
+                    padding: '10px 18px', borderRadius: 10, border: 'none', background: 'linear-gradient(135deg, #38bdf8, #818cf8)',
+                    color: '#0f172a', fontWeight: 700, fontSize: 15, cursor: 'pointer', boxShadow: '0 4px 14px rgba(56,189,248,0.35)'
+                  }}>Speichern</button>
+                </form>
+                <p style={{ margin: '12px 0 0', minHeight: 24, color: feedback.includes('Gespeichert') ? '#4ade80' : (feedback.includes('Fehler') || feedback.includes('Ungültig')) ? '#f87171' : '#94a3b8', fontSize: 13, fontWeight: 500 }}>{feedback}</p>
+              </section>
+
+              <section style={{
+                background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)',
+                borderRadius: 18, padding: 24, boxShadow: '0 10px 30px rgba(0,0,0,0.2)'
+              }}>
+                <h3 style={{ margin: '0 0 14px', fontSize: 18, fontWeight: 700, color: '#f8fafc' }}>Saved Airports</h3>
+                <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                  {list.map(c => (
+                    <li key={c} style={{
+                      background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.12)',
+                      borderRadius: 10, padding: '8px 14px', display: 'flex', alignItems: 'center', gap: 10
+                    }}>
+                      <span style={{ fontWeight: 700, color: '#38bdf8', letterSpacing: '0.5px' }}>{c}</span>
+                      <button onClick={() => removeAirport(c)} style={{
+                        background: 'rgba(255,255,255,0.08)', border: 'none', borderRadius: 6, color: '#f87171',
+                        fontSize: 14, cursor: 'pointer', padding: '2px 6px', lineHeight: 1
+                      }} title="Entfernen">×</button>
+                    </li>
+                  ))}
+                  {!list.length && <li style={{ color: '#94a3b8', fontSize: 14 }}>No airports saved yet.</li>}
+                </ul>
+              </section>
+            </>
+          )}
+
+          {tab === 'flights' && (
+            <section style={{
+              background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)',
+              borderRadius: 18, padding: 24, boxShadow: '0 10px 30px rgba(0,0,0,0.2)'
+            }}>
+              <h3 style={{ margin: '0 0 14px', fontSize: 18, fontWeight: 700, color: '#f8fafc' }}>Flight Schedule</h3>
+              <div style={{ display: 'flex', gap: 10, marginBottom: 16, flexWrap: 'wrap' }}>
+                <input type="date" value={flightDate} onChange={e => { setFlightDate(e.target.value); loadFlights(); }}
+                  style={{ padding: '10px 14px', borderRadius: 10, border: '1px solid rgba(255,255,255,0.15)',
+                  background: 'rgba(255,255,255,0.06)', color: '#f8fafc', fontSize: 15 }} />
+                <button onClick={loadFlights} style={{
+                  padding: '10px 18px', borderRadius: 10, border: 'none', background: 'linear-gradient(135deg, #38bdf8, #818cf8)',
+                  color: '#0f172a', fontWeight: 700, cursor: 'pointer'
+                }}>Refresh</button>
+              </div>
+              <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: 10 }}>
+                {flights.map(f => (
+                  <li key={f.airport_icao+f.destination_icao} style={{
+                    background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)',
+                    borderRadius: 12, padding: '14px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center'
+                  }}>
+                    <div>
+                      <strong style={{ color: '#f8fafc', fontSize: 15 }}>{f.airport_icao}</strong> <span style={{ color: '#94a3b8' }}>{f.airport_name || ''}</span>
+                      <span style={{ margin: '0 8px', color: '#38bdf8' }}>→</span>
+                      <strong style={{ color: '#f8fafc', fontSize: 15 }}>{f.destination_icao}</strong> <span style={{ color: '#94a3b8' }}>{f.destination_name || ''}</span>
+                      <div style={{ fontSize: 12, color: '#64748b', marginTop: 4 }}>{f.direction}</div>
+                    </div>
+                  </li>
+                ))}
+                {!flights.length && <li style={{ color: '#94a3b8', fontSize: 14 }}>No flight data available.</li>}
+              </ul>
+            </section>
+          )}
+
+          {tab === 'trips' && (
+            <section style={{
+              background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)',
+              borderRadius: 18, padding: 24, boxShadow: '0 10px 30px rgba(0,0,0,0.2)'
+            }}>
+              <h3 style={{ margin: '0 0 14px', fontSize: 18, fontWeight: 700, color: '#f8fafc' }}>My Trips</h3>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 14 }}>
+                {[
+                  { title: 'Tokyo Weekend', date: '15–18 Nov', status: 'Planned' },
+                  { title: 'Berlin Business', date: '02–04 Dec', status: 'Confirmed' },
+                ].map(t => (
+                  <div key={t.title} style={{
+                    background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.10)',
+                    borderRadius: 14, padding: 18
+                  }}>
+                    <div style={{ fontWeight: 700, color: '#f8fafc', fontSize: 16 }}>{t.title}</div>
+                    <div style={{ color: '#94a3b8', fontSize: 13, marginTop: 6 }}>{t.date}</div>
+                    <div style={{ marginTop: 10, display: 'inline-block', padding: '4px 10px', borderRadius: 8, background: t.status === 'Confirmed' ? 'rgba(74,222,128,0.15)' : 'rgba(56,189,248,0.15)', color: t.status === 'Confirmed' ? '#4ade80' : '#38bdf8', fontSize: 12, fontWeight: 600 }}>{t.status}</div>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+
+          {tab === 'costs' && (
+            <section style={{
+              background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)',
+              borderRadius: 18, padding: 24, boxShadow: '0 10px 30px rgba(0,0,0,0.2)'
+            }}>
+              <h3 style={{ margin: '0 0 14px', fontSize: 18, fontWeight: 700, color: '#f8fafc' }}>Cost Overview</h3>
+              <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+                {[
+                  { label: 'Flights', value: '€ 430', color: '#38bdf8' },
+                  { label: 'Hotels', value: '€ 890', color: '#818cf8' },
+                  { label: 'Transport', value: '€ 120', color: '#a78bfa' },
+                  { label: 'Food', value: '€ 310', color: '#f472b6' },
+                ].map(c => (
+                  <div key={c.label} style={{ flex: '1 1 160px', background: 'rgba(255,255,255,0.05)', borderRadius: 14, padding: 18, border: '1px solid rgba(255,255,255,0.08)' }}>
+                    <div style={{ fontSize: 13, color: '#94a3b8', marginBottom: 4 }}>{c.label}</div>
+                    <div style={{ fontSize: 22, fontWeight: 800, color: c.color }}>{c.value}</div>
+                  </div>
+                ))}
+              </div>
+              <div style={{ marginTop: 20, padding: 14, borderRadius: 12, background: 'rgba(255,255,255,0.03)', border: '1px dashed rgba(255,255,255,0.12)' }}>
+                <strong style={{ color: '#f8fafc' }}>Total estimated: € 1,750</strong> — Update after booking to see real costs.
+              </div>
+            </section>
+          )}
+        </div>
+      </main>
     </div>
   );
 }
