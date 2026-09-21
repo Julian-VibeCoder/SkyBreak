@@ -38,7 +38,7 @@ def fetch_flights(airport_code, year_ahead=None):
             res.raise_for_status()
         logger.info("RapidAPI aerodatabox response: status=%s airport=%s", res.status_code, airport_code)
         data = res.json()
-        flights = data.get("data", []) if isinstance(data, dict) else data
+        flights = data.get("departures", []) or data.get("arrivals", []) or (data.get("data", []) if isinstance(data, dict) else data)
         # Include all flights returned by endpoint within window
         return flights
     except Exception as e:
