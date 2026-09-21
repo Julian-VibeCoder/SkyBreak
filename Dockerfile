@@ -9,6 +9,7 @@ COPY skybreak/ ./skybreak/
 COPY init_db.py ./
 RUN python init_db.py
 COPY frontend/ ./frontend/
+RUN cd /app/frontend && npm ci && npm run build
 
 # Final: nur Runtime
 FROM python:3.11-slim
