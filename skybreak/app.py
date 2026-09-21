@@ -49,7 +49,7 @@ def list_flights():
         params.append(airport)
     if request.args.get('date'):
         date_filter = request.args.get('date').strip()
-        sql += " AND date(departure_time) = ?"
+        sql += " AND date(departure_time) >= ?"
         params.append(date_filter)
     rows = conn.execute(sql, params).fetchall()
     conn.close()

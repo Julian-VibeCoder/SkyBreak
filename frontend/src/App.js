@@ -16,7 +16,7 @@ export default function App() {
   const [flights, setFlights] = useState([]);
       const [expanded, setExpanded] = useState({});
     const toggle = (c) => setExpanded(e => ({...e, [c]: !e[c]}));
-    const [flightDate, setFlightDate] = useState('');
+    const [flightDate, setFlightDate] = useState(new Date().toISOString().split('T')[0]);
   const [futureInfo, setFutureInfo] = useState({});
   const [apiKeyValue, setApiKeyValue] = useState(''); const [hasApiKey, setHasApiKey] = useState(false);
 
