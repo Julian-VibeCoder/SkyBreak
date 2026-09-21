@@ -28,7 +28,7 @@ def remove_airport(code):
 
 @app.route("/")
 def index():
-    return app.send_static_file("index.html")
+    return app.send_from_directory("/app/frontend/build", "index.html")
 
 @app.route("/api/flights", methods=["GET"])
 def list_flights():
