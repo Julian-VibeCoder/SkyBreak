@@ -25,16 +25,24 @@ def save_flights(airport_code, flights):
                 arr_time = arr_time_raw.get("utc") or arr_time_raw.get("local", "")
             else:
                 arr_time = arr_time_raw or ""
-            dest_icao = (arr.get("airport") or {}).get("icao") or arr.get("icao") or f.get("arrival_icao") or f.get("destination_icao") or ""
-            if not dest_icao or str(dest_icao).upper() == str(airport_code).upper():
-                continue
-            dest_name = (arr.get("airport") or {}).get("name") or arr.get("name") or ""
-            # Direction: is this airport the departure airport of the flight?
-            dep_airport_icao = (dep.get("airport") or {}).get("icao") or dep.get("icao") or f.get("departure_icao", airport_code)
+            dep_airport_icao = (dep.get("airport") or {}).get("icao") or dep.get("icao") or f.get("departure_icao") or airport_code
             direction = "departure" if str(dep_airport_icao).upper() == str(airport_code).upper() else "arrival"
+            if direction == "departure":
+                dest_icao = (arr.get("airport") or {}).get("icao") or arr.get("icao") or f.get("arrival_icao") or f.get("destination_icao") or ""
+                dest_name = (arr.get("airport") or {}).get("name") or arr.get("name") or ""
+                if not dest_icao or str(dest_icao).upper() == str(airport_code).upper():
+                    continue
+            else:
+                # arrival at airport_code: source (shown as "From" in UI) = departure airport
+                dest_icao = dep_airport_icao
+                dest_name = (dep.get("airport") or {}).get("name") or dep.get("name") or ""
+                if not dest_icao or str(dest_icao).upper() == str(airport_code).upper():
+                    continue
+            from skybreak.airport_lookup import fetch_airport_name
+            airport_name = fetch_airport_name(airport_code) or airport_code
             conn.execute(
                 "INSERT OR IGNORE INTO flights (airport_icao, airport_name, destination_icao, destination_name, flight_direction, departure_time, year_ahead) VALUES (?, ?, ?, ?, ?, ?, ?)",
-                (airport_code, airport_code, dest_icao, dest_name, direction, dep_time or arr_time, 365)
+                (airport_code, airport_name, dest_icao, dest_name, direction, dep_time or arr_time, 365)
             )
         except Exception:
             continue
