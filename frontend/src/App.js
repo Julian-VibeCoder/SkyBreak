@@ -183,7 +183,7 @@ export default function App() {
               background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)',
               borderRadius: 18, padding: 24, boxShadow: '0 10px 30px rgba(0,0,0,0.2)'
             }}>
-              <h3 style={{ margin: '0 0 14px', fontSize: 18, fontWeight: 700, color: '#f8fafc' }}>Flight Schedule</h3>
+              <h3 style={{ margin: '0 0 14px', fontSize: 18, fontWeight: 700, color: '#f8fafc' }}>Flight Schedule</h3><div style={{ display: 'flex', gap: 10, marginBottom: 16, flexWrap: 'wrap' }}><input type='date' value={flightDate} onChange={e => { setFlightDate(e.target.value); loadFlights(); }} style={{ padding: '10px 14px', borderRadius: 10, border: '1px solid rgba(255,255,255,0.15)', background: 'rgba(255,255,255,0.06)', color: '#f8fafc', fontSize: 15 }} /><button onClick={loadFlights} style={{ padding: '10px 18px', borderRadius: 10, border: 'none', background: 'linear-gradient(135deg,#38bdf8,#818cf8)', color: '#0f172a', fontWeight: 700, cursor: 'pointer' }}>Refresh</button></div>
               {list.map(airport => {
                 const arr = flights.filter(f => f.airport_icao === airport && f.direction === 'arrival');
                 const dep = flights.filter(f => f.airport_icao === airport && f.direction === 'departure');
@@ -192,9 +192,7 @@ export default function App() {
                     <button onClick={() => toggle(airport)} style={{ width: '100%', textAlign: 'left', padding: '12px 16px', borderRadius: 10, border: '1px solid rgba(255,255,255,0.08)', background: 'rgba(255,255,255,0.06)', color: '#f8fafc', fontWeight: 700, fontSize: 16, cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       {airport} <span style={{ color: '#94a3b8', fontWeight: 500 }}>✈️</span>
                     </button>
-                    <div style={{ marginTop: 8, padding: 8 }}>{expanded[airport] ? (
-                      <div>
-                        <strong style={{ color: '#4ade80', fontSize: 13 }}>Arrivals</strong>
+                    <div style={{ marginTop: 8, padding: 8 }}>{expanded[airport] ? (<div><div><strong style={{ color: '#4ade80', fontSize: 13 }}>Arrivals</strong>
                         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, marginTop: 6 }}>
                           <thead><tr style={{ borderBottom: '1px solid rgba(255,255,255,0.1)' }}><th style={{ textAlign: 'left', padding: '4px 8px', color: '#94a3b8' }}>From</th><th style={{ textAlign: 'left', padding: '4px 8px', color: '#94a3b8' }}>Time</th></tr></thead>
                           <tbody>{arr.map(a => <tr key={a.destination_icao} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}><td style={{ padding: '4px 8px' }}>{a.destination_icao}</td><td style={{ padding: '4px 8px' }}>{a.departure_time}</td></tr>)}</tbody>
