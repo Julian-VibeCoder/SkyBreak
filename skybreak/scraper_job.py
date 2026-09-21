@@ -11,14 +11,28 @@ def save_flights(airport_code, flights):
     conn.execute("CREATE TABLE IF NOT EXISTS flights (id INTEGER PRIMARY KEY AUTOINCREMENT, airport_icao TEXT, airport_name TEXT, destination_icao TEXT, destination_name TEXT, flight_direction TEXT, departure_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP, year_ahead INTEGER DEFAULT 365, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)")
     for f in flights:
         try:
-            # Parse departure / arrival from public API response
-            dep_time = f.get("departure", f.get("scheduled_departure", ""))
-            arr_time = f.get("arrival", f.get("scheduled_arrival", ""))
-            dest = f.get("arrival", {}).get("icao") if isinstance(f.get("arrival"), dict) else f.get("arrival_icao", f.get("destination_icao", ""))
-            direction = "departure" if airport_code == f.get("departure", {}).get("icao", airport_code) else "arrival"
+            # RapidAPI nested format
+            dep = f.get("departure") or {}
+            arr = f.get("arrival") or {}
+            dep_time_raw = dep.get("scheduledTime") or dep.get("scheduledTime", {})
+            if isinstance(dep_time_raw, dict):
+                dep_time = dep_time_raw.get("utc") or dep_time_raw.get("local", "")
+            else:
+                dep_time = dep_time_raw or ""
+            # For arrival-based flows, also allow arrival time if departure missing
+            arr_time_raw = arr.get("scheduledTime") or arr.get("scheduledTime", {})
+            if isinstance(arr_time_raw, dict):
+                arr_time = arr_time_raw.get("utc") or arr_time_raw.get("local", "")
+            else:
+                arr_time = arr_time_raw or ""
+            dest_icao = (arr.get("airport") or {}).get("icao") or arr.get("icao") or f.get("arrival_icao") or f.get("destination_icao") or ""
+            dest_name = (arr.get("airport") or {}).get("name") or arr.get("name") or ""
+            # Direction: is this airport the departure airport of the flight?
+            dep_airport_icao = (dep.get("airport") or {}).get("icao") or dep.get("icao") or f.get("departure_icao", airport_code)
+            direction = "departure" if str(dep_airport_icao).upper() == str(airport_code).upper() else "arrival"
             conn.execute(
                 "INSERT OR IGNORE INTO flights (airport_icao, airport_name, destination_icao, destination_name, flight_direction, departure_time, year_ahead) VALUES (?, ?, ?, ?, ?, ?, ?)",
-                (airport_code, airport_code, dest or airport_code, dest or "", direction, dep_time or arr_time, 365)
+                (airport_code, airport_code, dest_icao or airport_code, dest_name or "", direction, dep_time or arr_time, 365)
             )
         except Exception:
             continue
