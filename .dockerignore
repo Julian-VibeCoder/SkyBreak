@@ -1,5 +1,5 @@
 node_modules
-frontend/src
+frontend/src/.gitkeep
 *.db
 .git
 .tmp
