@@ -1,6 +1,7 @@
 name: Build and Publish Docker
 
 on:
+  workflow_dispatch:
   push:
     branches: [main]
     tags: ['v*']
@@ -15,9 +16,9 @@ jobs:
   build-and-push:
     runs-on: ubuntu-latest
     permissions:
+      actions: read
       contents: read
       packages: write
-      actions: write
 
     steps:
       - name: Checkout repository
