@@ -5,7 +5,7 @@ from tenacity import retry, stop_after_attempt, wait_fixed, retry_if_exception_t
 from skybreak.airport import get_setting
 
 logger = logging.getLogger(__name__)
-BASE_URL = "https://aerodatabox.p.rapidapi.com/flights/airports/icao"
+BASE_URL = "https://aerodatabox.p.rapidapi.com/flights/airports/iata"
 
 @retry(
     stop=stop_after_attempt(5),
@@ -27,7 +27,7 @@ def fetch_flights(airport_code, year_ahead=None):
         "X-RapidAPI-Key": api_key,
         "X-RapidAPI-Host": "aerodatabox.p.rapidapi.com"
     }
-    params = {"icao": airport_code}
+    params = {"withLeg":"true","direction":"Both","withCodeshared":"true","withLocation":"false"}
     try:
         logger.info("RapidAPI aerodatabox access: airport=%s url=%s", airport_code, BASE_URL)
         res = requests.get(BASE_URL, headers=headers, params=params, timeout=10)
