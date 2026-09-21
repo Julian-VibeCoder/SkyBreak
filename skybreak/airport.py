@@ -19,6 +19,7 @@ def add_airport(code: str) -> int:
     cur = conn.execute("INSERT OR IGNORE INTO airports (code, name) VALUES (?, ?)", (code.upper(), code.upper()))
     conn.commit()
     conn.close()
+    trigger_fetch_for_airport(code.upper())
     return cur.rowcount
 
 def delete_airport(code: str) -> int:
@@ -31,4 +32,15 @@ def delete_airport(code: str) -> int:
     conn.execute("DELETE FROM flights WHERE airport_icao = ?", (code.upper(),))
     conn.commit()
     conn.close()
+    trigger_fetch_for_airport(code.upper())
     return cur.rowcount
+
+def trigger_fetch_for_airport(code: str):
+    from skybreak.flight_scraper import fetch_flights
+    from skybreak.scraper_job import save_flights
+    try:
+        data = fetch_flights(code)
+        if data:
+            save_flights(code, data)
+    except Exception:
+        pass
