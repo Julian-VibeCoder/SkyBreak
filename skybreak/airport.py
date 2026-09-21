@@ -1,11 +1,13 @@
 import logging, sqlite3, re
-DB_PATH = "skybreak.db"
+from skybreak.airport_lookup import fetch_airport_name
+DB_PATH = "/data/skybreak.db"
 logger = logging.getLogger(__name__)
 
 def init_db():
     conn = sqlite3.connect(DB_PATH, timeout=5)
     conn.execute("CREATE TABLE IF NOT EXISTS airports (id INTEGER PRIMARY KEY AUTOINCREMENT, code TEXT UNIQUE NOT NULL, name TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)")
     conn.execute("CREATE TABLE IF NOT EXISTS flights (id INTEGER PRIMARY KEY AUTOINCREMENT, airport_icao TEXT, airport_name TEXT, destination_icao TEXT, destination_name TEXT, flight_direction TEXT, departure_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP)")
+    conn.execute("CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT)")
     # Ensure columns exist for older DBs
     try:
         conn.execute("SELECT airport_name FROM flights LIMIT 1")
@@ -26,7 +28,8 @@ def add_airport(code: str) -> int:
         raise ValueError(f"Invalid IATA code: {code}")
     init_db()
     conn = sqlite3.connect(DB_PATH, timeout=5)
-    cur = conn.execute("INSERT OR IGNORE INTO airports (code, name) VALUES (?, ?)", (code.upper(), code.upper()))
+    name = fetch_airport_name(code.upper()) or code.upper()
+    cur = conn.execute("INSERT OR IGNORE INTO airports (code, name) VALUES (?, ?)", (code.upper(), name))
     conn.commit()
     conn.close()
     trigger_fetch_for_airport(code.upper())

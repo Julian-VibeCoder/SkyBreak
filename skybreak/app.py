@@ -76,12 +76,6 @@ def settings_check():
     key = get_setting("api_key")
     return jsonify({"has_key": bool(key and key.strip())})
 
-if __name__ == "__main__":
-    init_db()
-    from skybreak.scraper_job import start_scheduler
-    start_scheduler()
-    app.run(host="0.0.0.0", port=80)
-
 @app.route("/api/settings", methods=["GET", "POST"])
 def settings():
     from skybreak.airport import get_setting, set_setting
