@@ -17,6 +17,7 @@ export default function App() {
       const [expanded, setExpanded] = useState({});
     const toggle = (c) => setExpanded(e => ({...e, [c]: !e[c]}));
     const [flightDate, setFlightDate] = useState('');
+  const [futureInfo, setFutureInfo] = useState({});
   const [apiKeyValue, setApiKeyValue] = useState(''); const [hasApiKey, setHasApiKey] = useState(false);
 
   useEffect(() => {
@@ -38,7 +39,7 @@ export default function App() {
     let url = '/api/flights?';
     if (airport) url += 'airport=' + airport + '&';
     if (flightDate) url += 'date=' + flightDate;
-    fetch(url).then(r => r.json()).then(setFlights).catch(() => setFlights([]));
+    fetch(url).then(r => r.json()).then(data => { setFlights(data); fetch('/api/flights/future').then(r => r.json()).then(setFutureInfo).catch(() => setFutureInfo({})); }).catch(() => setFlights([]));
   };
 
   const submit = async (e) => {
@@ -189,9 +190,14 @@ export default function App() {
                 const dep = flights.filter(f => f.airport_icao === airport && f.direction === 'departure');
                 return (
                   <div key={airport} style={{ marginBottom: 16 }}>
-                    <button onClick={() => toggle(airport)} style={{ width: '100%', textAlign: 'left', padding: '12px 16px', borderRadius: 10, border: '1px solid rgba(255,255,255,0.08)', background: 'rgba(255,255,255,0.06)', color: '#f8fafc', fontWeight: 700, fontSize: 16, cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      {airport} <span style={{ color: '#94a3b8', fontWeight: 500 }}>✈️</span>
-                    </button>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
+                      <button onClick={() => toggle(airport)} style={{ flex: 1, textAlign: 'left', padding: '12px 16px', borderRadius: 10, border: '1px solid rgba(255,255,255,0.08)', background: 'rgba(255,255,255,0.06)', color: '#f8fafc', fontWeight: 700, fontSize: 16, cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        {airport} <span style={{ color: '#94a3b8', fontWeight: 500 }}>✈️</span>
+                      </button>
+                      <span style={{ marginLeft: 10, fontSize: 12, color: '#38bdf8', fontWeight: 600 }}>
+                        {futureInfo[airport] ? (futureInfo[airport].days_ahead !== null ? `+${futureInfo[airport].days_ahead} days ahead` : 'No future data') : '...'}
+                      </span>
+                    </div>
                     <div style={{ marginTop: 8, padding: 8 }}>{expanded[airport] ? (<div>
                       <div>
                         <strong style={{ color: '#4ade80', fontSize: 13 }}>Arrivals ({arr.length})</strong>

@@ -70,6 +70,34 @@ def list_flights():
     return jsonify(result)
 
 
+
+@app.route("/api/flights/future", methods=["GET"])
+def future_flights_info():
+    conn = sqlite3.connect(DB_PATH)
+    # For each airport shown in flights page, compute max departure_time from DB
+    rows = conn.execute("SELECT airport_icao, MAX(departure_time) FROM flights WHERE departure_time >= datetime('now') GROUP BY airport_icao").fetchall()
+    conn.close()
+    result = {}
+    from datetime import datetime
+    now = datetime.utcnow()
+    for airport_icao, max_time_str in rows:
+        if max_time_str:
+            try:
+                max_time = datetime.fromisoformat(max_time_str.replace('Z', '+00:00'))
+                delta = max_time - now.replace(tzinfo=max_time.tzinfo) if max_time.tzinfo else max_time - now
+                # If max_time has no tzinfo, keep simple
+                if max_time.tzinfo is None:
+                    delta = max_time - now
+                result[airport_icao] = {
+                    "max_departure_time": max_time_str,
+                    "days_ahead": round(delta.total_seconds() / 86400, 2)
+                }
+            except Exception:
+                result[airport_icao] = {"max_departure_time": max_time_str, "days_ahead": None}
+        else:
+            result[airport_icao] = {"max_departure_time": None, "days_ahead": None}
+    return jsonify(result)
+
 @app.route("/api/settings/check", methods=["GET"])
 def settings_check():
     from skybreak.airport import get_setting
