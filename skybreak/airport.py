@@ -73,7 +73,7 @@ def trigger_fetch_for_airport(code: str):
     else:
         start_dt = datetime.utcnow()
     target_end = start_dt + timedelta(days=365)
-    wait_time = 30 * 60
+    wait_time = 0  # start directly until first rate limit hits; then apply backoff
     current_start = start_dt
     fetched_any = False
     while True:
@@ -91,6 +91,9 @@ def trigger_fetch_for_airport(code: str):
             if current_start >= target_end:
                 break
         except Exception as e:
+            # First rate limit: start at 30m, then double
+            if wait_time == 0:
+                wait_time = 30 * 60
             time.sleep(wait_time)
             wait_time *= 2
     conn.close()

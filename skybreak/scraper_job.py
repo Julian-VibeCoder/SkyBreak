@@ -95,7 +95,7 @@ def scrape_all_airports():
             # We are still only able to fix 6 hours with a single api call
             # Fetch continuously until we cover 365 days ahead or rate limit stops us
             target_end = start_dt + timedelta(days=365)
-            wait_time = 30 * 60  # 30 minutes initially
+            wait_time = 0  # start directly until first rate limit hits; then apply backoff
             # We must fetch all windows continuously; when successful, next 6h directly after previous
             current_start = start_dt
             fetched_any = False
@@ -123,6 +123,9 @@ def scrape_all_airports():
                     logger.info("API call failed for %s at window %s: %s", code, start_str, e)
                     # Wait before retry; double each time rate limit still occurs
                     logger.info("Waiting %d seconds for %s before retry", wait_time, code)
+                    # First rate limit: start at 30m, then double
+                    if wait_time == 0:
+                        wait_time = 30 * 60
                     time.sleep(wait_time)
                     wait_time *= 2
                     # Try same window again after wait; don't advance until successful
