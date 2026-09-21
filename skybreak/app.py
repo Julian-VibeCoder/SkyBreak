@@ -4,7 +4,7 @@ from flask import Flask, request, jsonify, send_from_directory
 from skybreak.airport import add_airport, delete_airport, validate_iata, init_db
 import sqlite3
 app = Flask(__name__, static_folder="/app/frontend/build/static", static_url_path="/static")
-DB_PATH = "/data/skybreak.db"
+DB_PATH = "/data/skybreak.db/flights.db"
 
 @app.route("/api/airports", methods=["GET"])
 def list_airports():
