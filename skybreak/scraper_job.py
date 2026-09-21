@@ -8,12 +8,20 @@ DB_PATH = "/data/skybreak.db"
 
 def get_latest_flight_time(airport_code):
     conn = sqlite3.connect(DB_PATH, timeout=5)
+    # Latest flight in db for a given airport minus 6h as timestamp for each run
     row = conn.execute(
-        "SELECT departure_time FROM flights WHERE airport_icao = ? ORDER BY departure_time DESC LIMIT 1",
+        "SELECT MAX(departure_time) FROM flights WHERE airport_icao = ?",
         (airport_code,)
     ).fetchone()
     conn.close()
-    return row[0] if row else None
+    if row and row[0]:
+        latest = row[0]
+        # minus 6h
+        dt = datetime.fromisoformat(str(latest).replace("Z", "+00:00"))
+        if dt.tzinfo is not None:
+            dt = dt.replace(tzinfo=None)
+        return (dt - timedelta(hours=6)).strftime("%Y-%m-%dT%H:%M")
+    return None
 
 def save_flights(airport_code, flights):
     conn = sqlite3.connect(DB_PATH, timeout=5)
@@ -56,7 +64,7 @@ def save_flights(airport_code, flights):
                 continue
             conn.execute(
                 "INSERT OR IGNORE INTO flights (airport_icao, airport_name, destination_icao, destination_name, flight_direction, departure_time, flight_number, year_ahead) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                (airport_code, airport_name, dest_icao, dest_name, direction, dep_time or arr_time, 365)
+                (airport_code, airport_name, dest_icao, dest_name, direction, dep_time or arr_time, flight_number, 365)
             )
         except Exception:
             continue
@@ -64,56 +72,61 @@ def save_flights(airport_code, flights):
     conn.close()
 
 def scrape_all_airports():
-    import logging, sqlite3
+    import logging, sqlite3, time
     logger = logging.getLogger(__name__)
     conn = sqlite3.connect(DB_PATH, timeout=5)
     rows = conn.execute("SELECT code FROM airports").fetchall()
     conn.close()
     for (code,) in rows:
         try:
-            latest_str = get_latest_flight_time(code)
-            if latest_str:
-                start_str = (datetime.fromisoformat(latest_str.replace("Z", "+00:00")).replace(tzinfo=None) - timedelta(hours=6)).strftime("%Y-%m-%dT%H:%M")
+            # If there are missing flights (data not fetched completely for next 365 days) fetch until api restricts access due to rate limit
+            conn2 = sqlite3.connect(DB_PATH, timeout=5)
+            row_max = conn2.execute("SELECT MAX(departure_time) FROM flights WHERE airport_icao = ?", (code,)).fetchone()
+            conn2.close()
+            # If there are no flights in the db, use "now" as start time stamp
+            if row_max and row_max[0]:
+                latest_dt = datetime.fromisoformat(str(row_max[0]).replace("Z", "+00:00"))
+                if latest_dt.tzinfo is not None:
+                    latest_dt = latest_dt.replace(tzinfo=None)
+                # Use the latest flight in the db for a given airport minus 6h as timestamp for each run of the schedule
+                start_dt = latest_dt - timedelta(hours=6)
             else:
-                start_str = datetime.utcnow().strftime("%Y-%m-%dT%H:%M")
-            end_str = (datetime.utcnow() + timedelta(hours=6)).strftime("%Y-%m-%dT%H:%M")
-            # Keep fetching next 6h windows until rate limit stops us
-            wait_time = 30 * 60
-            max_attempts = 10
-            attempts = 0
+                start_dt = datetime.utcnow()
+            # We are still only able to fix 6 hours with a single api call
+            # Fetch continuously until we cover 365 days ahead or rate limit stops us
+            target_end = start_dt + timedelta(days=365)
+            wait_time = 30 * 60  # 30 minutes initially
+            # We must fetch all windows continuously; when successful, next 6h directly after previous
+            current_start = start_dt
             fetched_any = False
-            while attempts < max_attempts:
-                attempts += 1
+            # Continue fetching until target 365 days ahead covered or persistent rate limit
+            while True:
+                current_end = current_start + timedelta(hours=6)
+                # Stop if we've covered the full 365-day range
+                if current_start >= target_end:
+                    break
+                start_str = current_start.strftime("%Y-%m-%dT%H:%M")
+                end_str = current_end.strftime("%Y-%m-%dT%H:%M")
                 try:
                     data = fetch_flights(code, start_time_str=start_str, end_time_str=end_str)
                     if data:
                         save_flights(code, data)
                         fetched_any = True
                         logger.info("Batch fetched %d flights for %s (window %s to %s)", len(data), code, start_str, end_str)
-                    # After a successful call, advance window by 6h for next request
-                    try:
-                        end_dt = datetime.fromisoformat(end_str.replace("Z", "+00:00"))
-                        if end_dt.tzinfo is not None:
-                            end_dt = end_dt.replace(tzinfo=None)
-                        start_dt = end_dt + timedelta(hours=6)
-                        start_str = start_dt.strftime("%Y-%m-%dT%H:%M")
-                        end_dt = start_dt + timedelta(hours=6)
-                        end_str = end_dt.strftime("%Y-%m-%dT%H:%M")
-                    except Exception:
-                        pass
-                    # If no data returned but call succeeded, break (nothing more in range?)
-                    # Actually keep fetching until rate limit. Continue.
-                    if not data:
-                        # No flights in this window; still try next window (may be empty gaps)
-                        pass
+                    # When api call was successful, request next 6h directly after previous succeeded
+                    current_start = current_end
+                    # Check if we've covered 365 days
+                    if current_start >= target_end:
+                        break
                 except Exception as e:
-                    logger.info("Batch fetch failed for %s: %s", code, e)
-                    # Rate limit may occur; apply exponential wait
-                    logger.info("Waiting %d seconds before retry for %s", wait_time, code)
-                    import time
+                    # Rate limit or other failure
+                    logger.info("API call failed for %s at window %s: %s", code, start_str, e)
+                    # Wait before retry; double each time rate limit still occurs
+                    logger.info("Waiting %d seconds for %s before retry", wait_time, code)
                     time.sleep(wait_time)
                     wait_time *= 2
-                    break  # Exit inner loop, schedule will retry next run
+                    # Try same window again after wait; don't advance until successful
+                    # Continue loop; same current_start and current_end
             if not fetched_any:
                 logger.info("No new flights fetched for %s in this run", code)
         except Exception as e:

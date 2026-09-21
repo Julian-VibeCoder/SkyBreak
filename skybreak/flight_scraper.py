@@ -14,12 +14,7 @@ BASE_URL = "https://aerodatabox.p.rapidapi.com/flights/airports/iata"
     reraise=True
 )
 def fetch_flights(airport_code, year_ahead=None, start_time_str=None, end_time_str=None):
-    if year_ahead is None:
-        try:
-            year_ahead = int(get_setting("fetch_days_ahead"))
-        except Exception:
-            year_ahead = 2
-        year_ahead = min(year_ahead, 7)  # first-week batch for initial load
+    # Only able to fix 6 hours with a single api call; caller manages windows.
     api_key = get_setting("api_key") or ""
     if not api_key:
         return []

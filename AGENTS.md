@@ -27,3 +27,7 @@
 - [ ] Reihenfolge korrekt (Tests vor Code)?
 - [ ] Keine fehlenden Abhängigkeiten?
 - [ ] Review-Log aktualisiert?
+
+## Database Migration Requirement
+The container must handle an empty/missing database file.
+The container must migrate an existing db on its own to the latest schema.
