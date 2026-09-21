@@ -12,7 +12,7 @@ COPY frontend/ ./frontend/
 RUN cd frontend && npm install && npm run build
 
 # Final: nur Runtime
-FROM python:3.11-slit
+FROM python:3.11-slim
 RUN apt-get update && apt-get install -y --no-install-recommends libsqlite3-0 \
     && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
