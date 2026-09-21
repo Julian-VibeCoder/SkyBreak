@@ -1,6 +1,6 @@
 import logging
 import requests
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from tenacity import retry, stop_after_attempt, wait_fixed, retry_if_exception_type
 from skybreak.airport import get_setting
 
@@ -23,11 +23,11 @@ def fetch_flights(airport_code, year_ahead=None, start_time_str=None, end_time_s
         "X-RapidAPI-Host": "aerodatabox.p.rapidapi.com"
     }
     if start_time_str is None:
-        start_str = datetime.utcnow().strftime("%Y-%m-%dT%H:%M")
+        start_str = datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M")
     else:
         start_str = start_time_str
     if end_time_str is None:
-        end_str = (datetime.utcnow() + timedelta(hours=6)).strftime("%Y-%m-%dT%H:%M")
+        end_str = (datetime.now(datetime.timezone.utc) + timedelta(hours=6)).strftime("%Y-%m-%dT%H:%M")
     else:
         end_str = end_time_str
     url = f"{BASE_URL}/{airport_code}/{start_str}/{end_str}"

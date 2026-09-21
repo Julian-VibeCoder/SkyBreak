@@ -4,6 +4,7 @@ from flask import Flask, request, jsonify, send_from_directory
 from skybreak.airport_lookup import fetch_airport_name
 from skybreak.airport import add_airport, delete_airport, validate_iata, init_db
 import sqlite3
+from datetime import datetime, timezone
 app = Flask(__name__, static_folder="/app/frontend/build/static", static_url_path="/static")
 DB_PATH = "/data/skybreak.db"
 
@@ -42,7 +43,7 @@ def index():
 def list_flights():
     airport = request.args.get("airport", "").strip().upper()
     conn = sqlite3.connect(DB_PATH)
-    sql = "SELECT airport_icao, airport_name, destination_icao, destination_name, flight_direction, departure_time, flight_number FROM flights WHERE departure_time >= datetime('now') AND departure_time <= datetime('now', '+365 days')"
+    sql = "SELECT airport_icao, airport_name, destination_icao, destination_name, flight_direction, departure_time, flight_number FROM flights WHERE departure_time >= datetime('now','utc') AND departure_time <= datetime('now', '+365 days')"
     params = []
     if airport:
         sql += " AND airport_icao = ?"
@@ -65,7 +66,7 @@ def list_flights():
             "destination_icao": destination_icao,
             "destination_name": destination_name,
             "direction": r[4],
-            "departure_time": r[5],
+            "departure_time": r[5] + ("Z" if r[5] and not r[5].endswith("Z") and "+" not in r[5][-6:] else ""),
             "flight_number": r[6] or ""
         })
     return jsonify(result)
@@ -76,25 +77,25 @@ def list_flights():
 def future_flights_info():
     conn = sqlite3.connect(DB_PATH)
     # For each airport shown in flights page, compute max departure_time from DB
-    rows = conn.execute("SELECT airport_icao, MAX(departure_time) FROM flights WHERE departure_time >= datetime('now') GROUP BY airport_icao").fetchall()
+    rows = conn.execute("SELECT airport_icao, MAX(departure_time) FROM flights WHERE departure_time >= datetime('now','utc') GROUP BY airport_icao").fetchall()
     conn.close()
     result = {}
     from datetime import datetime
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     for airport_icao, max_time_str in rows:
         if max_time_str:
             try:
                 max_time = datetime.fromisoformat(max_time_str.replace('Z', '+00:00'))
-                delta = max_time - now.replace(tzinfo=max_time.tzinfo) if max_time.tzinfo else max_time - now
+                delta = max_time - now if max_time.tzinfo else max_time.replace(tzinfo=timezone.utc) - now
                 # If max_time has no tzinfo, keep simple
                 if max_time.tzinfo is None:
-                    delta = max_time - now
+                    delta = max_time.replace(tzinfo=timezone.utc) - now
                 result[airport_icao] = {
-                    "max_departure_time": max_time_str,
+                    "max_departure_time": (max_time_str + "Z") if max_time_str and not max_time_str.endswith("Z") and "+" not in max_time_str[-6:] else max_time_str,
                     "days_ahead": round(delta.total_seconds() / 86400, 2)
                 }
             except Exception:
-                result[airport_icao] = {"max_departure_time": max_time_str, "days_ahead": None}
+                result[airport_icao] = {"max_departure_time": (max_time_str + "Z") if max_time_str and not max_time_str.endswith("Z") and "+" not in max_time_str[-6:] else max_time_str, "days_ahead": None}
         else:
             result[airport_icao] = {"max_departure_time": None, "days_ahead": None}
     return jsonify(result)

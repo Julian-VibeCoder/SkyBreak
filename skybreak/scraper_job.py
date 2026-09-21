@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import logging
 import sqlite3
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -18,8 +18,9 @@ def get_latest_flight_time(airport_code):
         latest = row[0]
         # minus 6h
         dt = datetime.fromisoformat(str(latest).replace("Z", "+00:00"))
-        if dt.tzinfo is not None:
-            dt = dt.replace(tzinfo=None)
+        # Assume DB stores UTC; keep tzinfo for arithmetic then format as UTC
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
         return (dt - timedelta(hours=6)).strftime("%Y-%m-%dT%H:%M")
     return None
 
@@ -33,13 +34,19 @@ def save_flights(airport_code, flights):
             dep_time_raw = dep.get("scheduledTime") or dep.get("scheduledTime", {})
             if isinstance(dep_time_raw, dict):
                 dep_time = dep_time_raw.get("utc") or dep_time_raw.get("local", "")
-            else:
+            if not dep_time:
                 dep_time = dep_time_raw or ""
+            else:
+                if not dep_time.endswith("Z") and "+" not in dep_time[-6:] and len(dep_time) == 19:
+                    dep_time += "+00:00"
             arr_time_raw = arr.get("scheduledTime") or arr.get("scheduledTime", {})
             if isinstance(arr_time_raw, dict):
                 arr_time = arr_time_raw.get("utc") or arr_time_raw.get("local", "")
-            else:
+            if not arr_time:
                 arr_time = arr_time_raw or ""
+            else:
+                if not arr_time.endswith("Z") and "+" not in arr_time[-6:] and len(arr_time) == 19:
+                    arr_time += "+00:00"
             dep_airport_icao = (dep.get("airport") or {}).get("icao") or dep.get("icao") or f.get("departure_icao") or airport_code
             direction = "departure" if str(dep_airport_icao).upper() == str(airport_code).upper() else "arrival"
             if direction == "departure":
@@ -97,7 +104,7 @@ def scrape_all_airports():
                 # Use the latest flight in the db for a given airport minus 6h as timestamp for each run of the schedule
                 start_dt = latest_dt - timedelta(hours=6)
             else:
-                start_dt = datetime.utcnow()
+                start_dt = datetime.now(timezone.utc)
             # We are still only able to fix 6 hours with a single api call
             # Fetch continuously until we cover 365 days ahead or rate limit stops us
             target_end = start_dt + timedelta(days=max_days)
