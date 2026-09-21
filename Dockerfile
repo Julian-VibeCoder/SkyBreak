@@ -5,7 +5,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends gcc libsqlite3-
 WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
-COPY init_db.py skybreak/ ./
+COPY skybreak/ ./skybreak/
+COPY init_db.py ./
 RUN python init_db.py
 COPY frontend/ ./frontend/
 RUN cd frontend && npm install && npm run build || echo "build attempted"
