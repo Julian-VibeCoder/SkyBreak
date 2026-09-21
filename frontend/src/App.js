@@ -15,12 +15,14 @@ export default function App() {
   const [feedback, setFeedback] = useState('');
   const [flights, setFlights] = useState([]);
   const [flightDate, setFlightDate] = useState('');
-  const [hasApiKey, setHasApiKey] = useState(false);
+  const [apiKeyValue, setApiKeyValue] = useState(''); const [hasApiKey, setHasApiKey] = useState(false);
 
   useEffect(() => {
     fetch('/api/settings/check').then(r => r.json()).then(data => {
-      setHasApiKey(!!(data && data.has_key));
-    }).catch(() => setHasApiKey(false));
+      const has = !!(data && data.has_key);
+      setHasApiKey(has);
+      if (has) setApiKeyValue('••••••••'); else setApiKeyValue('');
+    }).catch(() => { setHasApiKey(false); setApiKeyValue(''); });
     fetch('/api/airports').then(r => r.json()).then(data => {
       const codes = Array.isArray(data) ? data.map(c => typeof c === 'string' ? c : c.code || c) : [];
       setList(codes);
@@ -234,7 +236,7 @@ export default function App() {
               <p style={{ color: '#94a3b8', fontSize: 14, marginBottom: 16 }}>Store your RapidAPI key for aviation data access.</p>
               <form onSubmit={async (e) => {
                 e.preventDefault();
-                const key = document.getElementById('apiKeyInput')?.value || '';
+                let raw = document.getElementById('apiKeyInput')?.value || ''; let key = (raw === '••••••••') ? '' : raw;
                 const res = await fetch('/api/settings', {
                   method: 'POST',
                   headers: {'Content-Type':'application/json'},
@@ -246,8 +248,8 @@ export default function App() {
                   alert('Failed to save');
                 }
               }} style={{ display: 'flex', gap: 10 }}>
-                <input id="apiKeyInput" type="password" placeholder="RapidAPI Key" value={hasApiKey ? '••••••••' : ''}
-                  onChange={e => { if (!hasApiKey || e.target.value === '') setHasApiKey(false); else setHasApiKey(true); }}
+                <input id="apiKeyInput" type="password" placeholder="RapidAPI Key" value={apiKeyValue}
+                  onChange={e => { setApiKeyValue(e.target.value); setHasApiKey(e.target.value.trim().length > 0); }}
                   style={{
                     flex: '1 1 240px', padding: '10px 14px', borderRadius: 10,
                     border: '1px solid rgba(255,255,255,0.15)', background: 'rgba(255,255,255,0.06)',
