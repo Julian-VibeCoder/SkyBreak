@@ -1,7 +1,7 @@
-from flask import Flask, request, jsonify, render_template
+from flask import Flask, request, jsonify
 from skybreak.airport import add_airport, delete_airport, validate_iata, init_db
 import sqlite3
-app = Flask(__name__, template_folder="frontend", static_folder="/app/frontend/build", static_url_path="/static")
+app = Flask(__name__, static_folder="frontend/build", static_url_path="/static")
 DB_PATH = "skybreak.db"
 @app.route("/api/airports", methods=["GET"])
 def list_airports():
@@ -28,14 +28,7 @@ def remove_airport(code):
 
 @app.route("/")
 def index():
-    from flask import render_template
-    # Serve the React build output; fallback for missing template folder
-    import os
-    build_path = os.path.join("frontend", "build", "index.html")
-    if os.path.exists(build_path):
-        with open(build_path) as f:
-            return f.read()
-    return render_template("index.html")
+    return app.send_static_file("index.html")
 
 @app.route("/api/flights", methods=["GET"])
 def list_flights():
