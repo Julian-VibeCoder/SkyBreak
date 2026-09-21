@@ -20,7 +20,7 @@ COPY --from=builder /usr/local/lib/python3.11/site-packages /usr/local/lib/pytho
 COPY --from=builder /app/requirements.txt .
 COPY --from=builder /app/skybreak/ ./skybreak/
 COPY --from=builder /app/init_db.py .
-COPY --from=builder /app/skybreak.db .
+
 COPY --from=builder /app/frontend/build ./frontend/build
 
 EXPOSE 80
