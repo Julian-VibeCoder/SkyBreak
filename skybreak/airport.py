@@ -97,6 +97,9 @@ def trigger_fetch_for_airport(code: str):
             if current_start >= target_end:
                 break
         except Exception as e:
+            # Rate limit retry with backoff
+            if "429" in str(e):
+                logger.info("Rate limit (429) hit for %s at window %s; backing off %ds", code, start_str, wait_time if wait_time > 0 else 30*60)
             # First rate limit: start at 30m, then double
             if wait_time == 0:
                 wait_time = 30 * 60

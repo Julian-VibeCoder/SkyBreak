@@ -1,18 +1,11 @@
 import logging
 import requests
 from datetime import datetime, timedelta, timezone
-from tenacity import retry, stop_after_attempt, wait_fixed, retry_if_exception_type
 from skybreak.airport import get_setting
 
 logger = logging.getLogger(__name__)
 BASE_URL = "https://aerodatabox.p.rapidapi.com/flights/airports/iata"
 
-@retry(
-    stop=stop_after_attempt(5),
-    wait=wait_fixed(30*60),
-    retry=retry_if_exception_type((requests.exceptions.RequestException,)),
-    reraise=True
-)
 def fetch_flights(airport_code, year_ahead=None, start_time_str=None, end_time_str=None):
     # Only able to fix 6 hours with a single api call; caller manages windows.
     api_key = get_setting("api_key") or ""
@@ -35,6 +28,8 @@ def fetch_flights(airport_code, year_ahead=None, start_time_str=None, end_time_s
     try:
         logger.info("RapidAPI aerodatabox access: airport=%s url=%s", airport_code, url)
         res = requests.get(url, headers=headers, params=params, timeout=10)
+        if res.status_code == 429:
+            logger.warning("Rate limit hit (429) for airport=%s url=%s retrying...", airport_code, url)
         if res.status_code in (400, 401, 403, 404, 429, 503):
             res.raise_for_status()
         logger.info("RapidAPI aerodatabox response: status=%s airport=%s", res.status_code, airport_code)

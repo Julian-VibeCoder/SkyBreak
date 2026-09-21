@@ -139,6 +139,8 @@ def scrape_all_airports():
                 except Exception as e:
                     # Rate limit or other failure
                     logger.info("API call failed for %s at window %s: %s", code, start_str, e)
+                    if "429" in str(e):
+                        logger.warning("Rate limit (429) hit for %s at window %s; backing off %ds before retry", code, start_str, wait_time if wait_time > 0 else 30*60)
                     # Wait before retry; double each time rate limit still occurs
                     logger.info("Waiting %d seconds for %s before retry", wait_time, code)
                     # First rate limit: start at 30m, then double
