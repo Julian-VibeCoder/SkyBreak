@@ -22,7 +22,6 @@ COPY --from=builder /app/skybreak/ ./skybreak/
 COPY --from=builder /app/init_db.py .
 COPY --from=builder /app/skybreak.db .
 COPY --from=builder /app/frontend/build ./frontend/build
-RUN mkdir -p ./frontend/build/static/js && echo "('SkyBreak')" > ./frontend/build/static/js/main.js || true
 
 RUN pip install --no-cache-dir -r requirements.txt 2>/dev/null || true
 EXPOSE 8000
