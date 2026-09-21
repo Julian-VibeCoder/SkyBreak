@@ -147,7 +147,6 @@ export default function App() {
                       flex: '1 1 120px', padding: '10px 14px', borderRadius: 10, border: '1px solid rgba(255,255,255,0.15)',
                       background: 'rgba(255,255,255,0.06)', color: '#f8fafc', fontSize: 15, outline: 'none'
                     }}/>
-                <input id="fetchMaxDays" type="number" min="1" max="365" defaultValue="7" placeholder="Max fetch days (1-365)" style={{ padding: "10px 14px", borderRadius: 10, border: "1px solid rgba(255,255,255,0.15)", background: "rgba(255,255,255,0.06)", color: "#f8fafc", fontSize: 15, width: 140, outline: "none" }} />
                   <button type="submit" style={{
                     padding: '10px 18px', borderRadius: 10, border: 'none', background: 'linear-gradient(135deg, #38bdf8, #818cf8)',
                     color: '#0f172a', fontWeight: 700, fontSize: 15, cursor: 'pointer', boxShadow: '0 4px 14px rgba(56,189,248,0.35)'
@@ -283,6 +282,9 @@ export default function App() {
                     border: '1px solid rgba(255,255,255,0.15)', background: 'rgba(255,255,255,0.06)',
                     color: '#f8fafc', fontSize: 15, outline: 'none'
                   }}/>
+                <label htmlFor="fetchMaxDays" style={{ fontSize: 12, color: '#94a3b8', marginBottom: 4, display: 'block' }}>
+                  The parameter <code>fetch_max_days</code> controls how many days ahead flight data is fetched. It is globally shared between all airports.
+                </label>
                 <input id="fetchMaxDays" type="number" min="1" max="365" defaultValue="7" placeholder="Max fetch days (1-365)" style={{ padding: "10px 14px", borderRadius: 10, border: "1px solid rgba(255,255,255,0.15)", background: "rgba(255,255,255,0.06)", color: "#f8fafc", fontSize: 15, width: 140, outline: "none" }} />
                 <button type="submit" style={{
                   padding: '10px 18px', borderRadius: 10, border: 'none',

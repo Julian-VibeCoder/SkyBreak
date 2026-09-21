@@ -119,11 +119,16 @@ def scrape_all_airports():
                         save_flights(code, data)
                         fetched_any = True
                         logger.info("Batch fetched %d flights for %s (window %s to %s)", len(data), code, start_str, end_str)
-                    # When api call was successful, request next 6h directly after previous succeeded
-                    current_start = current_end
-                    # Check if we've covered 365 days
-                    if current_start >= target_end:
-                        break
+                        current_start = current_end
+                        if current_start >= target_end:
+                            break
+                    else:
+                        # Leere API-Antwort: Fenster nicht verschieben -> keine Lücke
+                        # Aber harte fetch_max_days-Grenze nicht ignorieren
+                        if current_start + timedelta(hours=6) >= target_end:
+                            # Keine Daten mehr im erlaubten Fenster: abbrechen
+                            current_start = current_end
+                            break
                 except Exception as e:
                     # Rate limit or other failure
                     logger.info("API call failed for %s at window %s: %s", code, start_str, e)
