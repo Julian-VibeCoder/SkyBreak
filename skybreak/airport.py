@@ -39,7 +39,7 @@ def delete_airport(code: str) -> int:
     conn = sqlite3.connect(DB_PATH, timeout=5)
     cur = conn.execute("DELETE FROM airports WHERE code = ?", (code.upper(),))
     # Also clean up flights for this airport to avoid orphaned data per Story 11
-    conn.execute("DELETE FROM flights WHERE airport_icao = ?", (code.upper(),))
+    conn.execute("DELETE FROM flights WHERE airport_icao = ? OR destination_icao = ?", (code.upper(), code.upper()))
     conn.commit()
     conn.close()
     return cur.rowcount
