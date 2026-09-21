@@ -17,6 +17,14 @@ def init_db():
         conn.execute("SELECT destination_name FROM flights LIMIT 1")
     except sqlite3.OperationalError:
         conn.execute("ALTER TABLE flights ADD COLUMN destination_name TEXT")
+    try:
+        conn.execute("SELECT flight_number FROM flights LIMIT 1")
+    except sqlite3.OperationalError:
+        conn.execute("ALTER TABLE flights ADD COLUMN flight_number TEXT")
+    try:
+        conn.execute("SELECT year_ahead FROM flights LIMIT 1")
+    except sqlite3.OperationalError:
+        conn.execute("ALTER TABLE flights ADD COLUMN year_ahead INTEGER DEFAULT 365")
     conn.commit()
     conn.close()
 
