@@ -1,5 +1,5 @@
 import sqlite3
-DB_PATH = "skybreak.db"
+DB_PATH = "/data/skybreak.db"
 
 def test_flights_table_exists():
     conn = sqlite3.connect(DB_PATH)
@@ -13,5 +13,5 @@ def test_flights_columns():
     rows = cursor.fetchall()
     conn.close()
     cols = {r[1]: r for r in rows}
-    for c in ["id","airport_code","destination_icao","scheduled_departure","scheduled_arrival","flight_direction","year_ahead","created_at"]:
+    for c in ["id","airport_icao","airport_name","destination_icao","destination_name","flight_direction","departure_time","flight_number","year_ahead","created_at"]:
         assert c in cols, f"Spalte {c} fehlt"

@@ -8,7 +8,7 @@ def test_save_flights_parses_nested():
     }]
     save_flights("FKB", flights)
     import sqlite3
-    conn = sqlite3.connect("skybreak.db")
+    conn = sqlite3.connect("/data/skybreak.db")
     rows = conn.execute("SELECT airport_icao, destination_icao, flight_direction, departure_time FROM flights WHERE airport_icao='FKB'").fetchall()
     conn.close()
     assert len(rows) == 1

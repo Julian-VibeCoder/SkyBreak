@@ -1,12 +1,13 @@
 import logging, sqlite3, re
 from skybreak.airport_lookup import fetch_airport_name
+from datetime import datetime, timezone
 DB_PATH = "/data/skybreak.db"
 logger = logging.getLogger(__name__)
 
 def init_db():
     conn = sqlite3.connect(DB_PATH, timeout=5)
     conn.execute("CREATE TABLE IF NOT EXISTS airports (id INTEGER PRIMARY KEY AUTOINCREMENT, code TEXT UNIQUE NOT NULL, name TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)")
-    conn.execute("CREATE TABLE IF NOT EXISTS flights (id INTEGER PRIMARY KEY AUTOINCREMENT, airport_icao TEXT, airport_name TEXT, destination_icao TEXT, destination_name TEXT, flight_direction TEXT, departure_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP)")
+    conn.execute("CREATE TABLE IF NOT EXISTS flights (id INTEGER PRIMARY KEY AUTOINCREMENT, airport_icao TEXT, airport_name TEXT, destination_icao TEXT, destination_name TEXT, flight_direction TEXT, departure_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP, flight_number TEXT, year_ahead INTEGER DEFAULT 365, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)")
     conn.execute("CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT)")
     # Ensure columns exist for older DBs
     try:
@@ -71,7 +72,7 @@ def trigger_fetch_for_airport(code: str):
             latest_dt = latest_dt.replace(tzinfo=None)
         start_dt = latest_dt - timedelta(hours=6)
     else:
-                start_dt = datetime.utcnow()
+        start_dt = datetime.now(timezone.utc).replace(tzinfo=None)
     max_days_raw = get_setting("fetch_max_days")
     try:
         max_days = int(max_days_raw)

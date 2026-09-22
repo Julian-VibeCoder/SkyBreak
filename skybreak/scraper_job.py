@@ -5,6 +5,7 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from skybreak.flight_scraper import fetch_flights
 
 DB_PATH = "/data/skybreak.db"
+logger = logging.getLogger(__name__)
 
 def get_latest_flight_time(airport_code):
     conn = sqlite3.connect(DB_PATH, timeout=5)
@@ -32,21 +33,21 @@ def save_flights(airport_code, flights):
             dep = f.get("departure") or {}
             arr = f.get("arrival") or {}
             dep_time_raw = dep.get("scheduledTime") or dep.get("scheduledTime", {})
+            # Parse scheduledTime: could be string or dict with "utc"/"local" keys
             if isinstance(dep_time_raw, dict):
                 dep_time = dep_time_raw.get("utc") or dep_time_raw.get("local", "")
-            if not dep_time:
-                dep_time = dep_time_raw or ""
             else:
-                if not dep_time.endswith("Z") and "+" not in dep_time[-6:] and len(dep_time) == 19:
-                    dep_time += "+00:00"
+                dep_time = dep_time_raw or ""
+            # Normalize timezone suffix if it's a 19-char string without tz info
+            if dep_time and not dep_time.endswith("Z") and "+" not in dep_time[-6:] and len(dep_time) == 19:
+                dep_time += "+00:00"
             arr_time_raw = arr.get("scheduledTime") or arr.get("scheduledTime", {})
             if isinstance(arr_time_raw, dict):
                 arr_time = arr_time_raw.get("utc") or arr_time_raw.get("local", "")
-            if not arr_time:
-                arr_time = arr_time_raw or ""
             else:
-                if not arr_time.endswith("Z") and "+" not in arr_time[-6:] and len(arr_time) == 19:
-                    arr_time += "+00:00"
+                arr_time = arr_time_raw or ""
+            if arr_time and not arr_time.endswith("Z") and "+" not in arr_time[-6:] and len(arr_time) == 19:
+                arr_time += "+00:00"
             dep_airport_icao = (dep.get("airport") or {}).get("icao") or dep.get("icao") or f.get("departure_icao") or airport_code
             direction = "departure" if str(dep_airport_icao).upper() == str(airport_code).upper() else "arrival"
             if direction == "departure":
@@ -73,7 +74,9 @@ def save_flights(airport_code, flights):
                 "INSERT OR IGNORE INTO flights (airport_icao, airport_name, destination_icao, destination_name, flight_direction, departure_time, flight_number, year_ahead) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                 (airport_code, airport_name, dest_icao, dest_name, direction, dep_time or arr_time, flight_number, 365)
             )
-        except Exception:
+            logger.debug("Saved flight: %s->%s %s at %s", airport_code, dest_icao, flight_number, dep_time)
+        except Exception as e:
+            logger.warning("Failed to save flight for %s: %s", airport_code, e)
             continue
     conn.commit()
     conn.close()

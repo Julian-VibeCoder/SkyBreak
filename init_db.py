@@ -1,7 +1,7 @@
 import os
 import sqlite3
 
-DB_FILE = os.environ.get("DB_FILE", "skybreak.db")
+DB_FILE = os.environ.get("DB_FILE", "/data/skybreak.db")
 conn = sqlite3.connect(DB_FILE)
 conn.execute("CREATE TABLE IF NOT EXISTS airports (id INTEGER PRIMARY KEY AUTOINCREMENT, code TEXT UNIQUE NOT NULL, name TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)")
 conn.execute("CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT)")

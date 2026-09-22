@@ -4,84 +4,88 @@
 
 ### Core Components
 
-1. **Web Frontend** (React/Vue.js)
-   - Responsive UI for airport codes, trip planning, and monitoring
-   - Dashboard for monitored trips and price charts
-   - Configuration panel for days off, turnaround windows, and alerts
+1. **Web Frontend** (React)
+   - Single-page application built with React and `react-scripts`
+   - Dashboard with tabs: Airports, Flights, Trips, Costs, Settings
+   - Airport code entry with IATA validation
+   - Flight schedule browsing with date filtering
+   - API key configuration for flight data access
 
-2. **Backend Service** (Node.js/Python)
-   - API layer for flight data management
-   - Local database (SQLite/PostgreSQL) for storing airports, flights, and trips
-   - Integration with Google Flight Scraper
+2. **Backend Service** (Python/Flask)
+   - REST API built with Flask serving static frontend build and JSON endpoints
+   - Routes: `/api/airports`, `/api/flights`, `/api/flights/future`, `/api/settings`
+   - Local SQLite database for airports, flights, and settings
+   - Integration with RapidAPI aerodatabox for flight data
 
-3. **Docker Compose** (Hosted Infrastructure)
-   - Container orchestration for backend, frontend, and scraper
-   - Separate services: API, Web App, Scraper, Database
-   - Configurable via environment variables
+3. **Scheduled Scraper** (Background Job)
+   - `apscheduler`-based background scheduler running periodic scrapes
+   - Fetches 6-hour windows continuously until 365-day range covered
+   - Rate-limit backoff: starts at 30 min, doubles on each 429
+   - Cleans old flights (`departure_time < now`) on each interval
 
-4. **Google Flight Scraper**
-   - Open-source scraper for flight prices (e.g., `google-flight-scraper`)
-   - Extracts departure/arrival times and prices from airline websites
+4. **Database** (SQLite)
+   - Tables: `airports`, `flights`, `settings`
+   - `airports`: code, name, created_at
+   - `flights`: airport_icao, airport_name, destination_icao, destination_name, flight_direction, departure_time, flight_number, year_ahead
+   - `settings`: key-value store for API key, fetch intervals, max days
+   - Schema migration on init for older databases
 
-5. **Price History & Charts**
-   - Daily price tracking for monitored trips
-   - Visualization using Chart.js or similar
-
-6. **Telegram Bot**
-   - Notification system for price drops below threshold
-   - Integration with Telegram Bot API
+5. **Containerization** (Docker + docker-compose)
+   - Multi-stage Dockerfile: builder (Python + Node) → final (Python runtime)
+   - Frontend built with `npm ci && npm run build` during build
+   - Single container serving both API and static frontend on port 80
+   - DB persisted via mounted volume
 
 ## Data Flow
 
-1. User enters airport codes in the web UI
-2. Backend loads flight data from the scraper (or cached)
-3. System calculates feasible turn-arounds (start→destination→return)
-4. Turn-arounds are stored with start/end times (excluding weekends)
-5. Monitored trips are selected for price tracking
-6. Every 24 hours, prices are fetched and compared against thresholds
-7. Price history charts are generated
-8. Telegram bot sends notifications when prices drop
+1. User enters airport code in the React UI
+2. Frontend POSTs to `/api/airports`; Flask validates IATA and stores in SQLite
+3. `add_airport()` triggers `trigger_fetch_for_airport()` which calls `fetch_flights()` in 6-hour windows
+4. Fetched flights are saved to SQLite via `save_flights()` (deduplication applied)
+5. Frontend GETs `/api/flights` with optional `airport` and `date` query params
+6. `/api/flights/future` returns per-airport max departure time and days-ahead
+7. `apscheduler` runs `scrape_all_airports()` on configured interval (default 30 min)
+8. Old flights (departure_time < now) are deleted by `clean_old_flights()`
+9. Settings page POSTs to `/api/settings` to store API key and fetch parameters
 
 ## Technology Stack
 
-- **Frontend:** React + Tailwind CSS (nice web UI)
-- **Backend:** Node.js + Express
+- **Frontend:** React 18, `react-scripts` 5.0.1
+- **Backend:** Python 3.11, Flask, sqlite3
 - **Database:** SQLite (lightweight, local)
-- **Containerization:** Docker + docker-compose
-- **Scraping:** Open-source Google Flight Scraper
-- **Notifications:** Telegram Bot API
-- **Charts:** Chart.js
+- **Containerization:** Docker multi-stage build, docker-compose
+- **Scraping:** RapidAPI aerodatabox (`requests` library)
+- **Scheduler:** `apscheduler` (BackgroundScheduler)
+- **HTTP Client:** `requests` for RapidAPI calls
+- **Caching:** In-memory `_airport_cache` dict for airport name lookups
 
 ## Key Requirements Mapping
 
 | Requirement | Component |
-|--------------|------------|
-| No paid APIs | Use open-source scraper + local caching |
-| Nice web frontend | React + Tailwind |
-| Docker/hosted | docker-compose.yml |
-| International airport codes | Input validation + geocoding |
-| Load departures/arrivals | Scraper + local DB |
-| Calculate turn-arounds | Algorithm in backend |
-| Configurable days off | Business logic in backend |
-| Select monitored trips | Filtering in UI |
-| Google Flight Engine | Open-source scraper |
-| Price checking every 24h | Cron-like scheduler |
-| Price chart | Chart.js |
-| Telegram notifications | Bot integration |
-| Remove monitoring | API endpoint to disable |
-| Remove airport | Cleanup in backend |
+|---|---|
+| No paid APIs | RapidAPI aerodatabox (freemium) + local SQLite caching |
+| Web frontend | React + `react-scripts` build |
+| Docker/hosted | Multi-stage Dockerfile + docker-compose |
+| International airport codes | `validate_iata()` (3-char IATA regex) + `fetch_airport_name()` |
+| Load departures/arrivals | RapidAPI fetch + local DB storage |
+| Calculate turn-arounds | Backend logic in scraper windows |
+| Configurable days off | Settings via `/api/settings` |
+| Select monitored trips | Future feature (trips tab placeholder) |
+| Price checking every 24h | `apscheduler` cron interval |
+| Price history | Stored in `flights` table (future feature) |
+| Remove monitoring | Future feature |
+| Remove airport | `DELETE /api/airports/<code>` + cleanup |
 
 ## Implementation Order (Incremental)
 
-1. **Architecture Setup** - Docker compose, basic structure
-2. **Airport Management** - CRUD for airports
-3. **Flight Scraper Integration** - Fetch flight data
-4. **Turnaround Calculation** - Logic for round trips
-5. **Monitoring System** - Track trips, store data
+1. **Architecture Setup** - Dockerfile + docker-compose
+2. **Airport Management** - CRUD for airports (`/api/airports` GET/POST/DELETE)
+3. **Flight Scraper Integration** - RapidAPI fetch + `save_flights()`
+4. **Turnaround Calculation** - Flight window logic
+5. **Monitoring System** - `apscheduler` + `scrape_all_airports()`
 6. **Price Tracking** - Daily price checks
-7. **Visualization** - Charts for price history
-8. **Telegram Notifications** - Alert system
-9. **Configuration** - Days off, thresholds, etc.
-10. **Frontend** - UI for all features
+7. **Visualization** - Price history charts (future)
+8. **Configuration** - Settings API (`/api/settings`)
+9. **Frontend** - React dashboard (airports, flights, settings tabs)
 
 Each component can be developed and tested independently.

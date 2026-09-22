@@ -5,8 +5,13 @@ from skybreak.airport_lookup import fetch_airport_name
 from skybreak.airport import add_airport, delete_airport, validate_iata, init_db
 import sqlite3
 from datetime import datetime, timezone
-app = Flask(__name__, static_folder="/app/frontend/build/static", static_url_path="/static")
-DB_PATH = "/data/skybreak.db"
+import os
+
+# Configurable paths for testing vs production
+FRONTEND_BUILD_DIR = os.environ.get("FRONTEND_BUILD_DIR", "/app/frontend/build")
+DB_PATH = os.environ.get("DB_FILE", "/data/skybreak.db")
+
+app = Flask(__name__, static_folder=os.path.join(FRONTEND_BUILD_DIR, "static"), static_url_path="/static")
 
 init_db()
 from skybreak.scraper_job import start_scheduler
@@ -37,7 +42,7 @@ def remove_airport(code):
 
 @app.route("/")
 def index():
-    return send_from_directory("/app/frontend/build", "index.html")
+    return send_from_directory(FRONTEND_BUILD_DIR, "index.html")
 
 @app.route("/api/flights", methods=["GET"])
 def list_flights():

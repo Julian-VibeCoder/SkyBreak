@@ -1,9 +1,9 @@
 === .github/workflows/ci.yml ===
-name: CI
+name: Vacation CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, story-13-14-date-price-filter, bugix]
   pull_request:
     branches: [main]
 
@@ -12,8 +12,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Run Tests
-        run: echo "Tests executed (TDD pipeline active)" && exit 0
+      - name: Install Python dependencies
+        run: pip install -r requirements.txt -q
+      - name: Install frontend dependencies and build
+        run: cd frontend && npm ci && npm run build
+      - name: Run pytest
+        run: pip install pytest -q && python -m pytest -v
 === .github/branch-protection.md ===
 # Branch Protection (Main)
 
