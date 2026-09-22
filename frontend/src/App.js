@@ -1,4 +1,7 @@
 import React, { useEffect, useState } from 'react';
+import CollapsibleSidebar from './components/CollapsibleSidebar';
+import Layout from './components/Layout';
+import WeekPicker from './components/WeekPicker';
 
 const NAV = [
   { key: 'airports', label: 'Airports', icon: '✈️' },
@@ -69,7 +72,7 @@ export default function App() {
       display: 'flex', minHeight: '100vh', fontFamily: "'Inter', 'Segoe UI', system-ui, sans-serif",
       background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)', color: '#f1f5f9'
     }}>
-      <aside style={{
+      <CollapsibleSidebar><aside style={{
         width: 260, flexShrink: 0, background: 'rgba(15,23,42,0.85)',
         backdropFilter: 'blur(12px)', borderRight: '1px solid rgba(255,255,255,0.06)',
         padding: '28px 20px', display: 'flex', flexDirection: 'column', gap: 10,
@@ -109,6 +112,7 @@ export default function App() {
           </div>
         </div>
       </aside>
+    </CollapsibleSidebar>
 
       <main style={{ flex: 1, padding: 36, overflow: 'auto' }}>
         <header style={{ marginBottom: 28, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -128,7 +132,7 @@ export default function App() {
             padding: '10px 18px', borderRadius: 10, background: 'rgba(255,255,255,0.05)',
             border: '1px solid rgba(255,255,255,0.08)', fontSize: 13, fontWeight: 600, color: '#e2e8f0'
           }}>
-            {new Date().toLocaleDateString('de-DE', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+            <WeekPicker date={flightDate} onChange={d => setFlightDate(d.toISOString().split('T')[0])} />
           </div>
         </header>
 
