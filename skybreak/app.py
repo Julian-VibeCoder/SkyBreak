@@ -105,6 +105,12 @@ def future_flights_info():
             result[airport_icao] = {"max_departure_time": None, "days_ahead": None}
     return jsonify(result)
 
+@app.route("/api/flights/fetch-now", methods=["POST"])
+def fetch_now():
+    from skybreak.scraper_job import scrape_all_airports
+    scrape_all_airports()
+    return jsonify({"fetched": True})
+
 @app.route("/api/settings/check", methods=["GET"])
 def settings_check():
     from skybreak.airport import get_setting
