@@ -150,6 +150,7 @@ def scrape_all_airports():
                         fetched_any = True
                         logger.info("Batch fetched %d flights for %s (window %s to %s)", len(data), code, start_str, end_str)
                         current_start = current_end
+                        retries = 0
                         if current_start >= target_end:
                             break
                     else:
@@ -160,8 +161,12 @@ def scrape_all_airports():
                             current_start = current_end
                             break
                 except Exception as e:
+                    retries += 1
+                    if retries > max_retries:
+                        logger.warning("Max retries (%d) exceeded for %s at %s; giving up on this window", max_retries, code, start_str)
+                        break
                     # Rate limit or other failure
-                    logger.info("API call failed for %s at window %s: %s", code, start_str, e)
+                    logger.info("API call failed for %s at window %s: %s (retry %d/%d)", code, start_str, e, retries, max_retries)
                     if "429" in str(e):
                         logger.warning("Rate limit (429) hit for %s at window %s; backing off %ds before retry", code, start_str, wait_time if wait_time > 0 else 30*60)
                     # Wait before retry; double each time rate limit still occurs
@@ -172,7 +177,6 @@ def scrape_all_airports():
                     time.sleep(wait_time)
                     wait_time *= 2
                     # Try same window again after wait; don't advance until successful
-                    # Continue loop; same current_start and current_end
             if not fetched_any:
                 logger.info("No new flights fetched for %s in this run", code)
         except Exception as e:

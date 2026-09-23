@@ -89,6 +89,8 @@ def trigger_fetch_for_airport(code: str):
     max_days = max(1, min(max_days, 365))
     target_end = start_dt + timedelta(days=max_days)
     wait_time = 0  # start directly until first rate limit hits; then apply backoff
+    retries = 0
+    max_retries = 3
     current_start = start_dt
     fetched_any = False
     while True:
@@ -103,9 +105,14 @@ def trigger_fetch_for_airport(code: str):
                 save_flights(code, data)
                 fetched_any = True
             current_start = current_end
+            retries = 0
             if current_start >= target_end:
                 break
         except Exception as e:
+            retries += 1
+            if retries > max_retries:
+                logger.warning("Max retries (%d) exceeded for %s at %s; giving up", max_retries, code, start_str)
+                break
             # Rate limit retry with backoff
             if "429" in str(e):
                 logger.info("Rate limit (429) hit for %s at window %s; backing off %ds", code, start_str, wait_time if wait_time > 0 else 30*60)

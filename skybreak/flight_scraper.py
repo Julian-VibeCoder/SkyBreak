@@ -28,10 +28,17 @@ def fetch_flights(airport_code, year_ahead=None, start_time_str=None, end_time_s
     try:
         logger.info("RapidAPI aerodatabox access: airport=%s url=%s", airport_code, url)
         res = requests.get(url, headers=headers, params=params, timeout=10)
+        if res.status_code == 204:
+            logger.info("RapidAPI aerodatabox response: status=%s airport=%s (no content)", res.status_code, airport_code)
+            return []
         if res.status_code == 429:
             logger.warning("Rate limit hit (429) for airport=%s url=%s retrying...", airport_code, url)
-        if res.status_code in (400, 401, 403, 404, 429, 503):
             res.raise_for_status()
+        if res.status_code in (400, 401, 403, 404, 503):
+            res.raise_for_status()
+        if res.status_code != 200:
+            logger.info("RapidAPI aerodatabox response: status=%s airport=%s (unexpected)", res.status_code, airport_code)
+            return []
         logger.info("RapidAPI aerodatabox response: status=%s airport=%s", res.status_code, airport_code)
         data = res.json()
         flights = []
