@@ -1,0 +1,60 @@
+name: GHCR Cleanup – Delete non-protected branch tags
+
+on:
+  schedule:
+    - cron: '0 3 * * *'
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+permissions:
+  packages: write
+  contents: read
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup jq
+        run: sudo apt-get install -y -qq jq curl
+
+      - name: Delete non-protected package versions
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+        run: |
+          # GH package versions endpoint: /repos/{owner}/{repo}/packages/container/{package_type}/versions
+          # For ghcr, package_type = package name (image name without registry)
+          PKG="${GITHUB_REPOSITORY##*/}"
+          echo "Repo: $REPO  Package: $PKG"
+          # Fetch all versions with tags
+          curl -s -H "Authorization: Bearer $GH_TOKEN" \
+            "https://api.github.com/repos/$REPO/packages/container/$PKG/versions" > /tmp/versions.json
+          echo "Versions fetched: $(cat /tmp/versions.json | jq length)"
+
+          jq -c '.[] | {id: .id, name: .name, tags: (.metadata?.container?.tags // [])}' /tmp/versions.json | while read -r item; do
+            vid=$(echo "$item" | jq -r '.id')
+            # Tags array; we examine all tags for this version
+            echo "$item" | jq -r '.tags[]? // empty' | while read -r tag; do
+              [ -z "$tag" ] && continue
+              case "$tag" in
+                main|v*|branch-main) echo "KEEP version $vid tag=$tag" ;;
+                branch-*)
+                  echo "DELETE version $vid tag=$tag"
+                  curl -s -o /dev/null -w "%{http_code}" -X DELETE \
+                    -H "Authorization: Bearer $GH_TOKEN" \
+                    "https://api.github.com/repos/$REPO/packages/container/$PKG/versions/$vid"
+                  ;;
+                *) echo "IGNORE version $vid tag=$tag" ;;
+              esac
+            done
+          done
