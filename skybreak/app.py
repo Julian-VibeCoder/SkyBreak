@@ -131,6 +131,54 @@ def settings():
         conn.close()
         return jsonify({r[0]: r[1] for r in rows})
 
+@app.route("/api/turnarounds", methods=["GET"])
+def turnarounds():
+    from datetime import datetime, timedelta
+    start_str = request.args.get('start', '')
+    end_str = request.args.get('end', '')
+    start_days = [int(x) for x in request.args.get('start_days', '').split(',') if x != '']
+    end_days = [int(x) for x in request.args.get('end_days', '').split(',') if x != '']
+    max_dep_str = request.args.get('max_dep_dest', '23:59')
+    min_ret_str = request.args.get('min_ret_dep', '00:00')
+    results = []
+    try:
+        start = datetime.strptime(start_str, '%Y-%m-%d').date() if start_str else datetime.now().date()
+        end = datetime.strptime(end_str, '%Y-%m-%d').date() if end_str else start + timedelta(days=14)
+    except Exception:
+        start = datetime.now().date()
+        end = start + timedelta(days=14)
+    # Predefined useful values: start Friday (5), end Sunday (0)
+    if not start_days: start_days = [5]
+    if not end_days: end_days = [0]
+    max_dep = max_dep_str.split(':')
+    max_dep_hour = int(max_dep[0]) if len(max_dep) > 0 else 23
+    max_dep_min = int(max_dep[1]) if len(max_dep) > 1 else 59
+    min_ret = min_ret_str.split(':')
+    min_ret_hour = int(min_ret[0]) if len(min_ret) > 0 else 0
+    min_ret_min = int(min_ret[1]) if len(min_ret) > 1 else 0
+    current = start
+    while current <= end:
+        if current.weekday() in start_days:
+            # Find return dates matching end weekdays after start
+            ret = current + timedelta(days=1)
+            while ret <= end:
+                if ret.weekday() in end_days:
+                    # Possible turnaround from start date to return date
+                    duration = (ret - current).days
+                    results.append({"start": current.strftime('%Y-%m-%d'), "end": ret.strftime('%Y-%m-%d'), "days": duration})
+                ret += timedelta(days=1)
+        current += timedelta(days=1)
+    # Deduplicate and sort
+    seen = set()
+    unique = []
+    for r in results:
+        key = (r['start'], r['end'])
+        if key not in seen:
+            seen.add(key)
+            unique.append(r)
+    unique.sort(key=lambda x: x['start'])
+    return jsonify({"turnarounds": unique, "count": len(unique)})
+
 if __name__ == "__main__":
     init_db()
     from skybreak.scraper_job import start_scheduler
