@@ -264,7 +264,7 @@ export default function App() {
                 const res = await fetch('/api/settings', {
                   method: 'POST',
                   headers: {'Content-Type':'application/json'},
-                  body: JSON.stringify({api_key: key, fetch_interval_minutes: document.getElementById('fetchInterval')?.value || 30, fetch_days_ahead: document.getElementById('fetchDaysAhead')?.value || 2, fetch_max_days: document.getElementById('fetchMaxDays')?.value || 7})
+                  body: JSON.stringify({api_key: key, fetch_interval_minutes: document.getElementById('fetchInterval')?.value || 30, fetch_max_days: document.getElementById('fetchMaxDays')?.value || 7})
                 });
                 if (res.ok) {
                   alert('API key saved');
@@ -284,10 +284,6 @@ export default function App() {
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                   <label htmlFor="fetchInterval" style={{ fontSize: 13, fontWeight: 600, color: '#f8fafc' }}>Fetch Interval (minutes)</label>
                   <input id="fetchInterval" type="number" min="1" max="1440" defaultValue="30" placeholder="Minutes" style={{ padding: "10px 14px", borderRadius: 10, border: "1px solid rgba(255,255,255,0.15)", background: "rgba(255,255,255,0.06)", color: "#f8fafc", fontSize: 15, width: 140, outline: "none" }} />
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                  <label htmlFor="fetchDaysAhead" style={{ fontSize: 13, fontWeight: 600, color: '#f8fafc' }}>Fetch Days Ahead</label>
-                  <input id="fetchDaysAhead" type="number" min="0" max="365" defaultValue="2" placeholder="Days ahead" style={{ padding: "10px 14px", borderRadius: 10, border: "1px solid rgba(255,255,255,0.15)", background: "rgba(255,255,255,0.06)", color: "#f8fafc", fontSize: 15, width: 140, outline: "none" }} />
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                   <label htmlFor="fetchMaxDays" style={{ fontSize: 13, fontWeight: 600, color: '#f8fafc' }}>Max Fetch Days (1-365)</label>

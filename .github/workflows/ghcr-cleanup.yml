@@ -47,14 +47,13 @@ jobs:
             echo "$item" | jq -r '.tags[]? // empty' | while read -r tag; do
               [ -z "$tag" ] && continue
               case "$tag" in
-                main|v*|branch-main) echo "KEEP version $vid tag=$tag" ;;
-                branch-*)
+                main|v*) echo "KEEP version $vid tag=$tag" ;;
+                *)
                   echo "DELETE version $vid tag=$tag"
                   curl -s -o /dev/null -w "%{http_code}" -X DELETE \
                     -H "Authorization: Bearer $GH_TOKEN" \
                     "https://api.github.com/repos/$REPO/packages/container/$PKG/versions/$vid"
                   ;;
-                *) echo "IGNORE version $vid tag=$tag" ;;
               esac
             done
           done
