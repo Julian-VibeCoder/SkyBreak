@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import CollapsibleSidebar from './components/CollapsibleSidebar';
 import Layout from './components/Layout';
-import WeekPicker from './components/WeekPicker';
 
 const NAV = [
   { key: 'airports', label: 'Airports', icon: '✈️' },
@@ -127,12 +126,6 @@ export default function App() {
               {tab === 'costs' && 'Track travel expenses and budget overview.'}
               {tab === 'settings' && 'Configure API key for flight data access.'}
             </p>
-          </div>
-          <div style={{
-            padding: '10px 18px', borderRadius: 10, background: 'rgba(255,255,255,0.05)',
-            border: '1px solid rgba(255,255,255,0.08)', fontSize: 13, fontWeight: 600, color: '#e2e8f0'
-          }}>
-            <WeekPicker date={flightDate} onChange={d => setFlightDate(d.toISOString().split('T')[0])} />
           </div>
         </header>
 
