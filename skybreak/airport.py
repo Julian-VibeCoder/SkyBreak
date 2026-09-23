@@ -26,6 +26,14 @@ def init_db():
         conn.execute("SELECT year_ahead FROM flights LIMIT 1")
     except sqlite3.OperationalError:
         conn.execute("ALTER TABLE flights ADD COLUMN year_ahead INTEGER DEFAULT 365")
+    try:
+        conn.execute("SELECT arrival_time FROM flights LIMIT 1")
+    except sqlite3.OperationalError:
+        conn.execute("ALTER TABLE flights ADD COLUMN arrival_time TIMESTAMP")
+    try:
+        conn.execute("SELECT duration_minutes FROM flights LIMIT 1")
+    except sqlite3.OperationalError:
+        conn.execute("ALTER TABLE flights ADD COLUMN duration_minutes INTEGER")
     conn.commit()
     conn.close()
 
@@ -52,6 +60,7 @@ def delete_airport(code: str) -> int:
     cur = conn.execute("DELETE FROM airports WHERE code = ?", (code.upper(),))
     # Also clean up flights for this airport to avoid orphaned data per Story 11
     conn.execute("DELETE FROM flights WHERE airport_icao = ? OR destination_icao = ?", (code.upper(), code.upper()))
+    _migrate_flights(conn)
     conn.commit()
     conn.close()
     return cur.rowcount
