@@ -34,6 +34,14 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Compute branch tag
+        id: branch_tag
+        run: |
+          RAW="${{ github.ref_name }}"
+          SANITIZED=$(echo "$RAW" | tr '/' '-' | sed 's/[^a-zA-Z0-9_.-]/_/g')
+          echo "value=branch-${SANITIZED}" >> $GITHUB_OUTPUT
+          echo "Branch tag = branch-${SANITIZED}"
+
       - name: Extract metadata
         id: meta
         uses: docker/metadata-action@v5
@@ -44,12 +52,14 @@ jobs:
             type=ref,event=pr
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
+            # Per-branch tag for open PR branches (non-main, sanitized)
+            type=raw,value=${{ steps.branch_tag.outputs.value }},enable=${{ github.ref_name != 'main' }}
 
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
         with:
           context: .
-          push: ${{ github.event_name != 'pull_request' }}
+          push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
