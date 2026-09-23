@@ -113,6 +113,8 @@ def scrape_all_airports():
             # Fetch continuously until we cover 365 days ahead or rate limit stops us
             target_end = start_dt + timedelta(days=max_days)
             wait_time = 0  # start directly until first rate limit hits; then apply backoff
+              retries = 0
+              max_retries = 3
             # We must fetch all windows continuously; when successful, next 6h directly after previous
             current_start = start_dt
             fetched_any = False
