@@ -271,22 +271,37 @@ export default function App() {
                 } else {
                   alert('Failed to save');
                 }
-              }} style={{ display: 'flex', gap: 10 }}>
-                <input id="apiKeyInput" type="password" placeholder="RapidAPI Key" value={apiKeyValue}
-                  onChange={e => { setApiKeyValue(e.target.value); setHasApiKey(e.target.value.trim().length > 0); }}
-                  style={{
-                    flex: '1 1 240px', padding: '10px 14px', borderRadius: 10,
-                    border: '1px solid rgba(255,255,255,0.15)', background: 'rgba(255,255,255,0.06)',
-                    color: '#f8fafc', fontSize: 15, outline: 'none'
-                  }}/>
-                <label htmlFor="fetchMaxDays" style={{ fontSize: 12, color: '#94a3b8', marginBottom: 4, display: 'block' }}>
-                  The parameter <code>fetch_max_days</code> controls how many days ahead flight data is fetched. It is globally shared between all airports.
-                </label>
-                <input id="fetchMaxDays" type="number" min="1" max="365" defaultValue="7" placeholder="Max fetch days (1-365)" style={{ padding: "10px 14px", borderRadius: 10, border: "1px solid rgba(255,255,255,0.15)", background: "rgba(255,255,255,0.06)", color: "#f8fafc", fontSize: 15, width: 140, outline: "none" }} />
+              }} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  <label htmlFor="apiKeyInput" style={{ fontSize: 13, fontWeight: 600, color: '#f8fafc' }}>API Key (RapidAPI)</label>
+                  <input id="apiKeyInput" type="password" placeholder="RapidAPI Key" value={apiKeyValue}
+                    onChange={e => { setApiKeyValue(e.target.value); setHasApiKey(e.target.value.trim().length > 0); }}
+                    style={{
+                      padding: '10px 14px', borderRadius: 10, border: '1px solid rgba(255,255,255,0.15)',
+                      background: 'rgba(255,255,255,0.06)', color: '#f8fafc', fontSize: 15, outline: 'none', width: '100%', maxWidth: 420
+                    }}/>
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  <label htmlFor="fetchInterval" style={{ fontSize: 13, fontWeight: 600, color: '#f8fafc' }}>Fetch Interval (minutes)</label>
+                  <input id="fetchInterval" type="number" min="1" max="1440" defaultValue="30" placeholder="Minutes" style={{ padding: "10px 14px", borderRadius: 10, border: "1px solid rgba(255,255,255,0.15)", background: "rgba(255,255,255,0.06)", color: "#f8fafc", fontSize: 15, width: 140, outline: "none" }} />
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  <label htmlFor="fetchDaysAhead" style={{ fontSize: 13, fontWeight: 600, color: '#f8fafc' }}>Fetch Days Ahead</label>
+                  <input id="fetchDaysAhead" type="number" min="0" max="365" defaultValue="2" placeholder="Days ahead" style={{ padding: "10px 14px", borderRadius: 10, border: "1px solid rgba(255,255,255,0.15)", background: "rgba(255,255,255,0.06)", color: "#f8fafc", fontSize: 15, width: 140, outline: "none" }} />
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  <label htmlFor="fetchMaxDays" style={{ fontSize: 13, fontWeight: 600, color: '#f8fafc' }}>Max Fetch Days (1-365)</label>
+                  <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+                    <input id="fetchMaxDays" type="number" min="1" max="365" defaultValue="7" placeholder="Max fetch days" style={{ padding: "10px 14px", borderRadius: 10, border: "1px solid rgba(255,255,255,0.15)", background: "rgba(255,255,255,0.06)", color: "#f8fafc", fontSize: 15, width: 140, outline: "none" }} />
+                    <span style={{ fontSize: 12, color: '#94a3b8', lineHeight: 1.5, maxWidth: 360 }}>
+                      The parameter <code>fetch_max_days</code> controls how many days ahead flight data is fetched. It is globally shared between all airports.
+                    </span>
+                  </div>
+                </div>
                 <button type="submit" style={{
-                  padding: '10px 18px', borderRadius: 10, border: 'none',
+                  marginTop: 8, padding: '10px 18px', borderRadius: 10, border: 'none',
                   background: 'linear-gradient(135deg, #38bdf8, #818cf8)',
-                  color: '#0f172a', fontWeight: 700, fontSize: 15, cursor: 'pointer'
+                  color: '#0f172a', fontWeight: 700, fontSize: 15, cursor: 'pointer', alignSelf: 'flex-start'
                 }}>Speichern</button>
               </form>
             </section>
