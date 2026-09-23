@@ -27,7 +27,7 @@ def get_latest_flight_time(airport_code):
 
 def save_flights(airport_code, flights):
     conn = sqlite3.connect(DB_PATH, timeout=5)
-    conn.execute("CREATE TABLE IF NOT EXISTS flights (id INTEGER PRIMARY KEY AUTOINCREMENT, airport_icao TEXT, airport_name TEXT, destination_icao TEXT, destination_name TEXT, flight_direction TEXT, departure_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP, flight_number TEXT, year_ahead INTEGER DEFAULT 365, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)")
+    conn.execute("CREATE TABLE IF NOT EXISTS flights (id INTEGER PRIMARY KEY AUTOINCREMENT, airport_icao TEXT, airport_name TEXT, destination_icao TEXT, destination_name TEXT, flight_direction TEXT, departure_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP, arrival_time TIMESTAMP, duration_minutes INTEGER, flight_number TEXT, year_ahead INTEGER DEFAULT 365, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)")
     for f in flights:
         try:
             dep = f.get("departure") or {}
@@ -70,9 +70,26 @@ def save_flights(airport_code, flights):
             ).fetchone()
             if existing:
                 continue
+            duration_raw = f.get("duration") or {}
+            duration_minutes = None
+            if isinstance(duration_raw, dict):
+                duration_str = duration_raw.get("durationTime") or duration_raw.get("duration") or ""
+            else:
+                duration_str = str(duration_raw) if duration_raw else ""
+            if duration_str:
+                try:
+                    import re
+                    m = re.search(r'PT(\d+)H(\d+)?M?', duration_str)
+                    if m:
+                        hours = int(m.group(1))
+                        mins = int(m.group(2)) if m.group(2) else 0
+                        duration_minutes = hours * 60 + mins
+                except Exception:
+                    pass
+            arr_time_for_arrivals = arr_time
             conn.execute(
-                "INSERT OR IGNORE INTO flights (airport_icao, airport_name, destination_icao, destination_name, flight_direction, departure_time, flight_number, year_ahead) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                (airport_code, airport_name, dest_icao, dest_name, direction, dep_time or arr_time, flight_number, 365)
+                "INSERT OR IGNORE INTO flights (airport_icao, airport_name, destination_icao, destination_name, flight_direction, departure_time, arrival_time, duration_minutes, flight_number, year_ahead) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (airport_code, airport_name, dest_icao, dest_name, direction, dep_time or arr_time, arr_time if direction == 'departure' else dep_time, duration_minutes, flight_number, 365)
             )
             logger.debug("Saved flight: %s->%s %s at %s", airport_code, dest_icao, flight_number, dep_time)
         except Exception as e:

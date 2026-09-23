@@ -48,7 +48,7 @@ def index():
 def list_flights():
     airport = request.args.get("airport", "").strip().upper()
     conn = sqlite3.connect(DB_PATH)
-    sql = "SELECT airport_icao, airport_name, destination_icao, destination_name, flight_direction, departure_time, flight_number FROM flights WHERE departure_time >= datetime('now','utc') AND departure_time <= datetime('now', '+365 days')"
+    sql = "SELECT airport_icao, airport_name, destination_icao, destination_name, flight_direction, departure_time, arrival_time, duration_minutes, flight_number FROM flights WHERE departure_time >= datetime('now','utc') AND departure_time <= datetime('now', '+365 days')"
     params = []
     if airport:
         sql += " AND airport_icao = ?"
@@ -72,7 +72,9 @@ def list_flights():
             "destination_name": destination_name,
             "direction": r[4],
             "departure_time": r[5] + ("Z" if r[5] and not r[5].endswith("Z") and "+" not in r[5][-6:] else ""),
-            "flight_number": r[6] or ""
+            "arrival_time": (r[6] + "Z" if r[6] and not r[6].endswith("Z") and "+" not in r[6][-6:] else r[6]) if len(r) > 6 and r[6] else None,
+            "duration_minutes": r[7] if len(r) > 7 and r[7] is not None else None,
+            "flight_number": r[8] or r[6] or "" if len(r) > 8 else (r[6] or "")
         })
     return jsonify(result)
 
