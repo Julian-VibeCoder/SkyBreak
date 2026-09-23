@@ -89,6 +89,7 @@ def scrape_all_airports():
     conn.close()
     for (code,) in rows:
         try:
+            from skybreak.airport import get_setting
             # If there are missing flights (data not fetched completely for next 365 days) fetch until api restricts access due to rate limit
             max_days_raw = get_setting("fetch_max_days")
             try:
@@ -162,10 +163,16 @@ def scrape_all_airports():
 def start_scheduler():
     from skybreak.airport import get_setting
     try:
-        interval = int(get_setting("fetch_interval_minutes") or 30)
+        raw = get_setting("fetch_interval_minutes") or "30"
+        interval = int(raw)
     except Exception:
         interval = 30
     import logging
+    if interval == 0:
+        logging.getLogger(__name__).info("Scheduler disabled (interval set to 0)")
+        return
+    # Allow up to one week (10080 minutes)
+    interval = max(1, min(interval, 10080))
     logging.getLogger(__name__).info("Scheduler interval set to %s minutes", interval)
     scheduler = BackgroundScheduler()
     scheduler.add_job(scrape_all_airports, "interval", minutes=interval)

@@ -288,9 +288,9 @@ export default function App() {
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                   <label htmlFor="fetchInterval" style={{ fontSize: 13, fontWeight: 600, color: '#f8fafc' }}>Fetch Interval (minutes)</label>
-                  <input id="fetchInterval" type="number" min="1" max="1440" defaultValue="30" placeholder="Minutes" style={{ padding: "10px 14px", borderRadius: 10, border: "1px solid rgba(255,255,255,0.15)", background: "rgba(255,255,255,0.06)", color: "#f8fafc", fontSize: 15, width: '100%', maxWidth: 420, outline: "none" }} />
+                  <input id="fetchInterval" type="number" min="0" max="10080" defaultValue="30" placeholder="Minutes" style={{ padding: "10px 14px", borderRadius: 10, border: "1px solid rgba(255,255,255,0.15)", background: "rgba(255,255,255,0.06)", color: "#f8fafc", fontSize: 15, width: '100%', maxWidth: 420, outline: "none" }} />
                   <span style={{ fontSize: 12, color: '#94a3b8', lineHeight: 1.5, maxWidth: 360 }}>
-                    How often flight data is fetched (minutes).
+                    How often flight data is fetched (minutes). 0 disables scheduling (up to 1 week = 10080 min).
                   </span>
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
