@@ -19,7 +19,7 @@ start_scheduler()
 
 @app.route("/api/airports", methods=["GET"])
 def list_airports():
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(DB_PATH, timeout=30.0)
     rows = conn.execute("SELECT code, name FROM airports").fetchall()
     conn.close()
     return jsonify([{"code": r[0], "name": r[1] or ""} for r in rows])
@@ -47,7 +47,7 @@ def index():
 @app.route("/api/flights", methods=["GET"])
 def list_flights():
     airport = request.args.get("airport", "").strip().upper()
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(DB_PATH, timeout=30.0)
     sql = "SELECT airport_icao, airport_name, destination_icao, destination_name, flight_direction, departure_time, arrival_time, duration_minutes, flight_number FROM flights WHERE departure_time >= datetime('now','utc') AND departure_time <= datetime('now', '+365 days')"
     params = []
     if airport:
@@ -82,7 +82,7 @@ def list_flights():
 
 @app.route("/api/flights/future", methods=["GET"])
 def future_flights_info():
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(DB_PATH, timeout=30.0)
     # For each airport shown in flights page, compute max departure_time from DB
     rows = conn.execute("SELECT airport_icao, MAX(departure_time) FROM flights WHERE departure_time >= datetime('now','utc') GROUP BY airport_icao").fetchall()
     conn.close()
@@ -141,7 +141,7 @@ def settings():
             set_setting(str(k), str(v))
         return jsonify({"updated": True})
     else:
-        conn = sqlite3.connect(DB_PATH)
+        conn = sqlite3.connect(DB_PATH, timeout=30.0)
         rows = conn.execute("SELECT key, value FROM settings").fetchall()
         conn.close()
         return jsonify({r[0]: r[1] for r in rows})
@@ -174,7 +174,7 @@ def turnarounds():
     min_ret_min = int(min_ret[1]) if len(min_ret) > 1 else 0
 
     # Fetch relevant flights from DB for this range
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(DB_PATH, timeout=30.0)
     sql = "SELECT airport_icao, destination_icao, departure_time, flight_number FROM flights WHERE departure_time >= datetime('now','utc') AND departure_time <= datetime('now', '+365 days')"
     params = []
     flights_db = conn.execute(sql, params).fetchall()

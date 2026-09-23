@@ -5,7 +5,7 @@ DB_PATH = "/data/skybreak.db"
 logger = logging.getLogger(__name__)
 
 def init_db():
-    conn = sqlite3.connect(DB_PATH, timeout=5)
+    conn = sqlite3.connect(DB_PATH, timeout=30.0)
     conn.execute("CREATE TABLE IF NOT EXISTS airports (id INTEGER PRIMARY KEY AUTOINCREMENT, code TEXT UNIQUE NOT NULL, name TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)")
     conn.execute("CREATE TABLE IF NOT EXISTS flights (id INTEGER PRIMARY KEY AUTOINCREMENT, airport_icao TEXT, airport_name TEXT, destination_icao TEXT, destination_name TEXT, flight_direction TEXT, departure_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP, flight_number TEXT, year_ahead INTEGER DEFAULT 365, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)")
     conn.execute("CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT)")
@@ -44,7 +44,7 @@ def add_airport(code: str) -> int:
     if not validate_iata(code):
         raise ValueError(f"Invalid IATA code: {code}")
     init_db()
-    conn = sqlite3.connect(DB_PATH, timeout=5)
+    conn = sqlite3.connect(DB_PATH, timeout=30.0)
     name = fetch_airport_name(code.upper()) or code.upper()
     cur = conn.execute("INSERT OR IGNORE INTO airports (code, name) VALUES (?, ?)", (code.upper(), name))
     conn.commit()
@@ -56,11 +56,10 @@ def delete_airport(code: str) -> int:
     if not validate_iata(code):
         raise ValueError(f"Invalid IATA code: {code}")
     init_db()
-    conn = sqlite3.connect(DB_PATH, timeout=5)
+    conn = sqlite3.connect(DB_PATH, timeout=30.0)
     cur = conn.execute("DELETE FROM airports WHERE code = ?", (code.upper(),))
     # Also clean up flights for this airport to avoid orphaned data per Story 11
     conn.execute("DELETE FROM flights WHERE airport_icao = ? OR destination_icao = ?", (code.upper(), code.upper()))
-    _migrate_flights(conn)
     conn.commit()
     conn.close()
     return cur.rowcount
@@ -71,8 +70,8 @@ def trigger_fetch_for_airport(code: str):
     from datetime import datetime, timedelta
     from skybreak.flight_scraper import fetch_flights
 
-    conn = sqlite3.connect(DB_PATH, timeout=5)
-    conn2 = sqlite3.connect(DB_PATH, timeout=5)
+    conn = sqlite3.connect(DB_PATH, timeout=30.0)
+    conn2 = sqlite3.connect(DB_PATH, timeout=30.0)
     row_max = conn2.execute("SELECT MAX(departure_time) FROM flights WHERE airport_icao = ?", (code,)).fetchone()
     conn2.close()
     if row_max and row_max[0]:
@@ -118,21 +117,21 @@ def trigger_fetch_for_airport(code: str):
     conn.close()
 
 def init_settings_db():
-    conn = sqlite3.connect(DB_PATH, timeout=5)
+    conn = sqlite3.connect(DB_PATH, timeout=30.0)
     conn.execute("CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT)")
     conn.commit()
     conn.close()
 
 def get_setting(key: str) -> str:
     init_settings_db()
-    conn = sqlite3.connect(DB_PATH, timeout=5)
+    conn = sqlite3.connect(DB_PATH, timeout=30.0)
     row = conn.execute("SELECT value FROM settings WHERE key = ?", (key,)).fetchone()
     conn.close()
     return row[0] if row else ""
 
 def set_setting(key: str, value: str):
     init_settings_db()
-    conn = sqlite3.connect(DB_PATH, timeout=5)
+    conn = sqlite3.connect(DB_PATH, timeout=30.0)
     conn.execute("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", (key, value))
     conn.commit()
     conn.close()
