@@ -106,9 +106,23 @@ def future_flights_info():
     return jsonify(result)
 
 @app.route("/api/flights/fetch-now", methods=["POST"])
+fetch_in_progress = False
+
+@app.route("/api/flights/fetch-now", methods=["POST"])
 def fetch_now():
+    global fetch_in_progress
+    if fetch_in_progress:
+        return jsonify({"fetched": False, "message": "Fetch already in progress"}), 409
     from skybreak.scraper_job import scrape_all_airports
-    scrape_all_airports()
+    import threading
+    def _run():
+        global fetch_in_progress
+        try:
+            scrape_all_airports()
+        finally:
+            fetch_in_progress = False
+    fetch_in_progress = True
+    threading.Thread(target=_run, daemon=True).start()
     return jsonify({"fetched": True})
 
 @app.route("/api/settings/check", methods=["GET"])
