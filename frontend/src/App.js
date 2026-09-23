@@ -260,14 +260,16 @@ export default function App() {
               <p style={{ color: '#94a3b8', fontSize: 14, marginBottom: 16 }}>Store your RapidAPI key for aviation data access.</p>
               <form onSubmit={async (e) => {
                 e.preventDefault();
-                let raw = document.getElementById('apiKeyInput')?.value || ''; let key = (raw === '••••••••') ? '' : raw;
+                let raw = document.getElementById('apiKeyInput')?.value || ''; let key = (raw === '••••••••') ? null : raw;
+                const body = { fetch_interval_minutes: document.getElementById('fetchInterval')?.value || 30, fetch_max_days: document.getElementById('fetchMaxDays')?.value || 7 };
+                if (key !== null) body.api_key = key;
                 const res = await fetch('/api/settings', {
                   method: 'POST',
                   headers: {'Content-Type':'application/json'},
-                  body: JSON.stringify({api_key: key, fetch_interval_minutes: document.getElementById('fetchInterval')?.value || 30, fetch_max_days: document.getElementById('fetchMaxDays')?.value || 7})
+                  body: JSON.stringify(body)
                 });
                 if (res.ok) {
-                  alert('API key saved');
+                  // saved silently
                 } else {
                   alert('Failed to save');
                 }
