@@ -280,19 +280,23 @@ export default function App() {
                       padding: '10px 14px', borderRadius: 10, border: '1px solid rgba(255,255,255,0.15)',
                       background: 'rgba(255,255,255,0.06)', color: '#f8fafc', fontSize: 15, outline: 'none', width: '100%', maxWidth: 420
                     }}/>
+                  <span style={{ fontSize: 12, color: '#94a3b8', lineHeight: 1.5, maxWidth: 360 }}>
+                    API key for rapidapi.com → AeroDataBox API.
+                  </span>
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                   <label htmlFor="fetchInterval" style={{ fontSize: 13, fontWeight: 600, color: '#f8fafc' }}>Fetch Interval (minutes)</label>
-                  <input id="fetchInterval" type="number" min="1" max="1440" defaultValue="30" placeholder="Minutes" style={{ padding: "10px 14px", borderRadius: 10, border: "1px solid rgba(255,255,255,0.15)", background: "rgba(255,255,255,0.06)", color: "#f8fafc", fontSize: 15, width: 140, outline: "none" }} />
+                  <input id="fetchInterval" type="number" min="1" max="1440" defaultValue="30" placeholder="Minutes" style={{ padding: "10px 14px", borderRadius: 10, border: "1px solid rgba(255,255,255,0.15)", background: "rgba(255,255,255,0.06)", color: "#f8fafc", fontSize: 15, width: '100%', maxWidth: 420, outline: "none" }} />
+                  <span style={{ fontSize: 12, color: '#94a3b8', lineHeight: 1.5, maxWidth: 360 }}>
+                    How often flight data is fetched (minutes).
+                  </span>
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                   <label htmlFor="fetchMaxDays" style={{ fontSize: 13, fontWeight: 600, color: '#f8fafc' }}>Max Fetch Days (1-365)</label>
-                  <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start', flexWrap: 'wrap' }}>
-                    <input id="fetchMaxDays" type="number" min="1" max="365" defaultValue="7" placeholder="Max fetch days" style={{ padding: "10px 14px", borderRadius: 10, border: "1px solid rgba(255,255,255,0.15)", background: "rgba(255,255,255,0.06)", color: "#f8fafc", fontSize: 15, width: 140, outline: "none" }} />
-                    <span style={{ fontSize: 12, color: '#94a3b8', lineHeight: 1.5, maxWidth: 360 }}>
-                      The parameter <code>fetch_max_days</code> controls how many days ahead flight data is fetched. It is globally shared between all airports.
-                    </span>
-                  </div>
+                  <input id="fetchMaxDays" type="number" min="1" max="365" defaultValue="7" placeholder="Max fetch days" style={{ padding: "10px 14px", borderRadius: 10, border: "1px solid rgba(255,255,255,0.15)", background: "rgba(255,255,255,0.06)", color: "#f8fafc", fontSize: 15, width: '100%', maxWidth: 420, outline: "none" }} />
+                  <span style={{ fontSize: 12, color: '#94a3b8', lineHeight: 1.5, maxWidth: 360 }}>
+                    The parameter <code>fetch_max_days</code> controls how many days ahead flight data is fetched. It is globally shared between all airports.
+                  </span>
                 </div>
                 <button type="submit" style={{
                   marginTop: 8, padding: '10px 18px', borderRadius: 10, border: 'none',
