@@ -110,9 +110,6 @@ def future_flights_info():
 fetch_in_progress = False
 
 @app.route("/api/flights/fetch-now", methods=["POST"])
-fetch_in_progress = False
-
-@app.route("/api/flights/fetch-now", methods=["POST"])
 def fetch_now():
     global fetch_in_progress
     if fetch_in_progress:
