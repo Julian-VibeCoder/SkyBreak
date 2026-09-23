@@ -21,6 +21,28 @@ export default function App() {
     const [flightDate, setFlightDate] = useState(new Date().toISOString().split('T')[0]);
   const [futureInfo, setFutureInfo] = useState({});
   const [apiKeyValue, setApiKeyValue] = useState(''); const [hasApiKey, setHasApiKey] = useState(false);
+  const [tripStart, setTripStart] = useState(new Date().toISOString().split('T')[0]);
+  const [tripEnd, setTripEnd] = useState(new Date(Date.now() + 7*86400000).toISOString().split('T')[0]);
+  const [startWeekdays, setStartWeekdays] = useState([5]);
+  const [endWeekdays, setEndWeekdays] = useState([0]);
+  const [maxDepToDest, setMaxDepToDest] = useState('18:00');
+  const [minRetDep, setMinRetDep] = useState('10:00');
+  const [startAirport, setStartAirport] = useState('');
+  const [endAirport, setEndAirport] = useState('');
+  const [turnarounds, setTurnarounds] = useState([]);
+
+  useEffect(() => {
+    if (tab === 'trips' && tripStart && tripEnd && startWeekdays.length > 0 && endWeekdays.length > 0 && maxDepToDest && minRetDep) {
+      const params = new URLSearchParams({
+        start: tripStart, end: tripEnd,
+        start_days: startWeekdays.join(','), end_days: endWeekdays.join(','),
+        max_dep_dest: maxDepToDest, min_ret_dep: minRetDep
+      });
+      if (startAirport) params.append('start_airport', startAirport);
+      if (endAirport) params.append('end_airport', endAirport);
+      fetch('/api/turnarounds?' + params.toString()).then(r => r.json()).then(data => setTurnarounds(data.turnarounds || data.results || [])).catch(() => setTurnarounds([]));
+    }
+  }, [tab, tripStart, tripEnd, startWeekdays, endWeekdays, maxDepToDest, minRetDep, startAirport, endAirport]);
 
   useEffect(() => {
     if (tab === 'flights') loadFlights();
@@ -199,9 +221,9 @@ export default function App() {
                       <div>
                         <strong style={{ color: '#4ade80', fontSize: 13 }}>Arrivals ({arr.length})</strong>
                         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, marginTop: 6 }}>
-                          <thead><tr style={{ borderBottom: '1px solid rgba(255,255,255,0.1)' }}><th style={{ textAlign: 'left', padding: '4px 8px', color: '#94a3b8' }}>From</th><th style={{ textAlign: 'left', padding: '4px 8px', color: '#94a3b8' }}>Flight</th><th style={{ textAlign: 'left', padding: '4px 8px', color: '#94a3b8' }}>Time</th></tr></thead>
+                          <thead><tr style={{ borderBottom: '1px solid rgba(255,255,255,0.1)' }}><th style={{ textAlign: 'left', padding: '4px 8px', color: '#94a3b8' }}>From</th><th style={{ textAlign: 'left', padding: '4px 8px', color: '#94a3b8' }}>Flight</th><th style={{ textAlign: 'left', padding: '4px 8px', color: '#94a3b8' }}>Departure</th><th style={{ textAlign: 'left', padding: '4px 8px', color: '#94a3b8' }}>Duration</th></tr></thead>
                           <tbody>
-                            {arr.length === 0 && <tr><td colSpan="3" style={{ padding: '4px 8px', color: '#94a3b8' }}>No arrivals</td></tr>}
+                            {arr.length === 0 && <tr><td colSpan="4" style={{ padding: '4px 8px', color: '#94a3b8' }}>No arrivals</td></tr>}
                             {arr.map(a => <tr key={a.id || a.destination_icao + a.departure_time} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
                               <td style={{ padding: '4px 8px' }}>{a.destination_name ? a.destination_name + ' (' + a.destination_icao + ')' : a.destination_icao}</td>
                               <td style={{ padding: '4px 8px', fontWeight: 600 }}>{a.flight_number || '-'}</td>
@@ -213,13 +235,15 @@ export default function App() {
                       <div style={{ marginTop: 10 }}>
                         <strong style={{ color: '#38bdf8', fontSize: 13 }}>Departures ({dep.length})</strong>
                         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, marginTop: 6 }}>
-                          <thead><tr style={{ borderBottom: '1px solid rgba(255,255,255,0.1)' }}><th style={{ textAlign: 'left', padding: '4px 8px', color: '#94a3b8' }}>To</th><th style={{ textAlign: 'left', padding: '4px 8px', color: '#94a3b8' }}>Flight</th><th style={{ textAlign: 'left', padding: '4px 8px', color: '#94a3b8' }}>Time</th></tr></thead>
+                          <thead><tr style={{ borderBottom: '1px solid rgba(255,255,255,0.1)' }}><th style={{ textAlign: 'left', padding: '4px 8px', color: '#94a3b8' }}>To</th><th style={{ textAlign: 'left', padding: '4px 8px', color: '#94a3b8' }}>Flight</th><th style={{ textAlign: 'left', padding: '4px 8px', color: '#94a3b8' }}>Departure</th><th style={{ textAlign: 'left', padding: '4px 8px', color: '#94a3b8' }}>Arrival</th><th style={{ textAlign: 'left', padding: '4px 8px', color: '#94a3b8' }}>Duration</th></tr></thead>
                           <tbody>
-                            {dep.length === 0 && <tr><td colSpan="3" style={{ padding: '4px 8px', color: '#94a3b8' }}>No departures</td></tr>}
+                            {dep.length === 0 && <tr><td colSpan="5" style={{ padding: '4px 8px', color: '#94a3b8' }}>No departures</td></tr>}
                             {dep.map(d => <tr key={d.id || d.destination_icao + d.departure_time} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
                               <td style={{ padding: '4px 8px' }}>{d.destination_name ? d.destination_name + ' (' + d.destination_icao + ')' : d.destination_icao}</td>
                               <td style={{ padding: '4px 8px', fontWeight: 600 }}>{d.flight_number || '-'}</td>
-                              <td style={{ padding: '4px 8px' }}>{d.departure_time ? (() => { const ts = d.departure_time; const dtLocal = new Date(ts.endsWith("Z") ? ts : ts + (ts.includes("+") || ts.includes("Z") ? "" : "+00:00")); return dtLocal.toLocaleString('de-DE', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit', timeZoneName: 'short' }) + ' (UTC→local)'; })() : '-'}</td>
+                              <td style={{ padding: '4px 8px', color: '#38bdf8' }}>{d.departure_time ? (() => { const ts = d.departure_time; const dtLocal = new Date(ts.endsWith("Z") ? ts : ts + (ts.includes("+") || ts.includes("Z") ? "" : "+00:00")); return dtLocal.toLocaleString('de-DE', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit', timeZoneName: 'short' }) + ' (UTC→local)'; })() : '-'}</td>
+                              <td style={{ padding: '4px 8px', color: '#4ade80' }}>{d.arrival_time ? (() => { const ts = d.arrival_time; const dtLocal = new Date(ts.endsWith("Z") ? ts : ts + (ts.includes("+") || ts.includes("Z") ? "" : "+00:00")); return dtLocal.toLocaleString('de-DE', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit', timeZoneName: 'short' }) + ' (UTC→local)'; })() : '-'}</td>
+                              <td style={{ padding: '4px 8px', color: '#818cf8' }}>{d.duration_minutes ? d.duration_minutes + ' min' : '-'}</td>
                             </tr>)}
                           </tbody>
                         </table>
@@ -238,7 +262,99 @@ export default function App() {
               background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)',
               borderRadius: 18, padding: 24, boxShadow: '0 10px 30px rgba(0,0,0,0.2)'
             }}>
-              <h3 style={{ margin: '0 0 14px', fontSize: 18, fontWeight: 700, color: '#f8fafc' }}>My Trips</h3>
+              <h3 style={{ margin: '0 0 14px', fontSize: 18, fontWeight: 700, color: '#f8fafc' }}>Trip Turnaround Finder</h3>
+              <p style={{ color: '#94a3b8', fontSize: 14, marginBottom: 18 }}>Find possible trip combinations based on date ranges and weekday preferences.</p>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 18, marginBottom: 18 }}>
+                <div style={{ background: 'rgba(255,255,255,0.03)', borderRadius: 14, padding: 16, border: '1px solid rgba(255,255,255,0.06)' }}>
+                  <label style={{ fontSize: 12, fontWeight: 600, color: '#f8fafc', display: 'block', marginBottom: 6 }}>Trip Start Date</label>
+                  <input type="date" value={tripStart} onChange={e => setTripStart(e.target.value)} style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.15)', background: 'rgba(255,255,255,0.06)', color: '#f8fafc', fontSize: 14 }} />
+                </div>
+                <div style={{ background: 'rgba(255,255,255,0.03)', borderRadius: 14, padding: 16, border: '1px solid rgba(255,255,255,0.06)' }}>
+                  <label style={{ fontSize: 12, fontWeight: 600, color: '#f8fafc', display: 'block', marginBottom: 6 }}>Trip End Date</label>
+                  <input type="date" value={tripEnd} onChange={e => setTripEnd(e.target.value)} style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.15)', background: 'rgba(255,255,255,0.06)', color: '#f8fafc', fontSize: 14 }} />
+                </div>
+                <div style={{ background: 'rgba(255,255,255,0.03)', borderRadius: 14, padding: 16, border: '1px solid rgba(255,255,255,0.06)' }}>
+                  <label style={{ fontSize: 12, fontWeight: 600, color: '#f8fafc', display: 'block', marginBottom: 6 }}>Start Weekdays</label>
+                  <select multiple value={startWeekdays.map(String)} onChange={e => setStartWeekdays([...e.target.options].filter(o => o.selected).map(o => parseInt(o.value)))} style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.15)', background: 'rgba(255,255,255,0.06)', color: '#f8fafc', fontSize: 13, height: 72 }}>
+                    <option value="0">Sunday</option>
+                    <option value="1">Monday</option>
+                    <option value="2">Tuesday</option>
+                    <option value="3">Wednesday</option>
+                    <option value="4">Thursday</option>
+                    <option value="5">Friday</option>
+                    <option value="6">Saturday</option>
+                  </select>
+                </div>
+                <div style={{ background: 'rgba(255,255,255,0.03)', borderRadius: 14, padding: 16, border: '1px solid rgba(255,255,255,0.06)' }}>
+                  <label style={{ fontSize: 12, fontWeight: 600, color: '#f8fafc', display: 'block', marginBottom: 6 }}>End Weekdays</label>
+                  <select multiple value={endWeekdays.map(String)} onChange={e => setEndWeekdays([...e.target.options].filter(o => o.selected).map(o => parseInt(o.value)))} style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.15)', background: 'rgba(255,255,255,0.06)', color: '#f8fafc', fontSize: 13, height: 72 }}>
+                    <option value="0">Sunday</option>
+                    <option value="1">Monday</option>
+                    <option value="2">Tuesday</option>
+                    <option value="3">Wednesday</option>
+                    <option value="4">Thursday</option>
+                    <option value="5">Friday</option>
+                    <option value="6">Saturday</option>
+                  </select>
+                </div>
+                <div style={{ background: 'rgba(255,255,255,0.03)', borderRadius: 14, padding: 16, border: '1px solid rgba(255,255,255,0.06)' }}>
+                  <label style={{ fontSize: 12, fontWeight: 600, color: '#f8fafc', display: 'block', marginBottom: 6 }}>Latest Departure to Destination</label>
+                  <input type="time" value={maxDepToDest} onChange={e => setMaxDepToDest(e.target.value)} style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.15)', background: 'rgba(255,255,255,0.06)', color: '#f8fafc', fontSize: 14 }} />
+                </div>
+                <div style={{ background: 'rgba(255,255,255,0.03)', borderRadius: 14, padding: 16, border: '1px solid rgba(255,255,255,0.06)' }}>
+                  <label style={{ fontSize: 12, fontWeight: 600, color: '#f8fafc', display: 'block', marginBottom: 6 }}>Start Airport (optional)</label>
+                  <select value={startAirport} onChange={e => setStartAirport(e.target.value)} style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.15)', background: 'rgba(255,255,255,0.06)', color: '#f8fafc', fontSize: 13 }}>
+                    <option value="">Any airport</option>
+                    {list.map(c => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                </div>
+                <div style={{ background: 'rgba(255,255,255,0.03)', borderRadius: 14, padding: 16, border: '1px solid rgba(255,255,255,0.06)' }}>
+                  <label style={{ fontSize: 12, fontWeight: 600, color: '#f8fafc', display: 'block', marginBottom: 6 }}>End Airport (optional)</label>
+                  <select value={endAirport} onChange={e => setEndAirport(e.target.value)} style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.15)', background: 'rgba(255,255,255,0.06)', color: '#f8fafc', fontSize: 13 }}>
+                    <option value="">Any airport</option>
+                    {list.map(c => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                </div>
+                <div style={{ background: 'rgba(255,255,255,0.03)', borderRadius: 14, padding: 16, border: '1px solid rgba(255,255,255,0.06)' }}>
+                  <label style={{ fontSize: 12, fontWeight: 600, color: '#f8fafc', display: 'block', marginBottom: 6 }}>Earliest Return Departure</label>
+                  <input type="time" value={minRetDep} onChange={e => setMinRetDep(e.target.value)} style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.15)', background: 'rgba(255,255,255,0.06)', color: '#f8fafc', fontSize: 14 }} />
+                </div>
+              </div>
+              <div style={{ marginBottom: 14, display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+                <button onClick={async () => {
+                  try {
+                    const res = await fetch('/api/turnarounds?' + new URLSearchParams({
+                      start: tripStart, end: tripEnd,
+                      start_days: startWeekdays.join(','), end_days: endWeekdays.join(','),
+                      max_dep_dest: maxDepToDest, min_ret_dep: minRetDep
+                    }));
+                    const data = await res.json();
+                    setTurnarounds(data.turnarounds || data.results || []);
+                  } catch (e) { setTurnarounds([]); }
+                }} style={{ padding: '10px 20px', borderRadius: 10, border: 'none', background: 'linear-gradient(135deg, #38bdf8, #818cf8)', color: '#0f172a', fontWeight: 700, fontSize: 14, cursor: 'pointer', boxShadow: '0 4px 14px rgba(56,189,248,0.35)' }}>Calculate Turnarounds</button>
+                <span style={{ fontSize: 12, color: '#94a3b8' }}>{turnarounds.length ? `${turnarounds.length} result${turnarounds.length > 1 ? 's' : ''}` : ''}</span>
+              </div>
+              {turnarounds.length > 0 && (
+                <div style={{ background: 'rgba(255,255,255,0.03)', borderRadius: 14, padding: 16, border: '1px solid rgba(255,255,255,0.08)' }}>
+                  <h4 style={{ margin: '0 0 10px', fontSize: 15, fontWeight: 700, color: '#f8fafc' }}>Possible Turnarounds</h4>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                    <thead><tr style={{ borderBottom: '1px solid rgba(255,255,255,0.12)' }}><th style={{ textAlign: 'left', padding: '6px 8px', color: '#94a3b8' }}>Outbound Flight</th><th style={{ textAlign: 'left', padding: '6px 8px', color: '#94a3b8' }}>Return Flight</th><th style={{ textAlign: 'left', padding: '6px 8px', color: '#94a3b8' }}>Trip Duration</th></tr></thead>
+                    <tbody>
+                      {turnarounds.map((t, i) => (
+                        <tr key={i} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                          <td style={{ padding: '6px 8px', color: '#f8fafc', fontWeight: 600 }}>
+                            {t.start_airport || 'LHR'} → {t.dest_airport || 'JFK'} ({t.out_flight || '-'}) dep {t.out_time || '-'}
+                          </td>
+                          <td style={{ padding: '6px 8px', color: '#f8fafc', fontWeight: 600 }}>
+                            {t.dest_airport || 'JFK'} → {t.end_airport || 'LHR'} ({t.ret_flight || '-'}) dep {t.ret_time || '-'}
+                          </td>
+                          <td style={{ padding: '6px 8px', color: '#38bdf8' }}>{t.start} → {t.end} ({t.days || '-'}d)</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </section>
           )}
 
