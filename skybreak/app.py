@@ -195,6 +195,10 @@ def turnarounds():
     flights_db = conn.execute(sql, params).fetchall()
     conn.close()
 
+    def airport_name(code):
+        from skybreak.airport_lookup import fetch_airport_name
+        return fetch_airport_name(code) or code
+
     def get_outbound_flights(date_obj):
         dt_str = date_obj.strftime('%Y-%m-%d')
         out = []
@@ -218,7 +222,7 @@ def turnarounds():
                     pass
         return out
 
-    def get_return_flights(date_obj):
+    def get_return_flights(date_obj, dest_icao, start_icao):
         dt_str = date_obj.strftime('%Y-%m-%d')
         ret = []
         for r in flights_db:
@@ -226,12 +230,9 @@ def turnarounds():
             destination_icao = r[1] or ''
             dep_time = r[2] or ''
             flight = r[3] or ''
-            # return flight: from destination back to start/end airport
-            if end_airport:
-                # destination should be the end airport (start of return)
-                if airport_icao != destination_icao and airport_icao == (start_airport or ''):
-                    pass  # rough filter; simplify below
-            # simpler: any flight on return date from any airport
+            # return flight must go from destination back to start airport
+            if airport_icao != dest_icao or destination_icao != start_icao:
+                continue
             if dep_time.startswith(dt_str):
                 try:
                     t = datetime.fromisoformat(dep_time.replace('Z', '+00:00').replace('+00:00', '') if '+' not in dep_time[-6:] else dep_time.replace('Z', '+00:00'))
@@ -249,39 +250,34 @@ def turnarounds():
             ret = current + timedelta(days=1)
             while ret <= end:
                 if ret.weekday() in end_days:
-                    ret_flights = get_return_flights(ret)
                     duration = (ret - current).days
-                    # If airport filters set, only include if flights match
-                    if out_flights and ret_flights:
-                        # Pick first outbound and first return for display
-                        of = out_flights[0]
-                        rf = ret_flights[0]
-                        results.append({
-                            "start": current.strftime('%Y-%m-%d'),
-                            "end": ret.strftime('%Y-%m-%d'),
-                            "days": duration,
-                            "start_airport": of['from'] or (start_airport or 'LHR'),
-                            "dest_airport": of['to'] or 'JFK',
-                            "end_airport": rf['to'] or (end_airport or 'LHR'),
-                            "out_flight": of['flight'] or '-',
-                            "out_time": of['time'] or '-',
-                            "ret_flight": rf['flight'] or '-',
-                            "ret_time": rf['time'] or '-'
-                        })
+                    if out_flights:
+                        # For each outbound, find matching return from dest to start
+                        for of in out_flights:
+                            dest_icao = of['to']
+                            start_icao = start_airport or of['from']
+                            ret_flights = get_return_flights(ret, dest_icao, start_icao)
+                            matched_ret = None
+                            for rf in ret_flights:
+                                if rf['from'] == dest_icao and rf['to'] == start_icao:
+                                    matched_ret = rf
+                                    break
+                            if matched_ret:
+                                results.append({
+                                    "start": current.strftime('%Y-%m-%d'),
+                                    "end": ret.strftime('%Y-%m-%d'),
+                                    "days": duration,
+                                    "start_airport": airport_name(of['from'] or (start_airport or 'LHR')),
+                                    "dest_airport": airport_name(of['to'] or 'JFK'),
+                                    "end_airport": airport_name(start_icao or 'LHR'),
+                                    "out_flight": of['flight'] or '-',
+                                    "out_time": of['time'] or '-',
+                                    "ret_flight": matched_ret['flight'] or '-',
+                                    "ret_time": matched_ret['time'] or '-'
+                                })
                     else:
-                        # Still include date pair even without matching flights, for filter verification
-                        results.append({
-                            "start": current.strftime('%Y-%m-%d'),
-                            "end": ret.strftime('%Y-%m-%d'),
-                            "days": duration,
-                            "start_airport": start_airport or 'LHR',
-                            "dest_airport": 'JFK',
-                            "end_airport": end_airport or 'LHR',
-                            "out_flight": '-',
-                            "out_time": '-',
-                            "ret_flight": '-',
-                            "ret_time": '-'
-                        })
+                        # No outbound flights on this start day
+                        pass
                 ret += timedelta(days=1)
         current += timedelta(days=1)
     seen = set()
@@ -296,4 +292,4 @@ def turnarounds():
 
 if __name__ == "__main__":
     init_db()
-    pass
+    app.run(host="0.0.0.0", port=80)
