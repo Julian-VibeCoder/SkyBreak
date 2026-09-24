@@ -17,6 +17,7 @@ conn = sqlite3.connect(DB_FILE)
 # Migration: remove old rapid api_key and fetch_months; keep only fetch_max_months
 conn.execute("CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT)")
 conn.execute("DELETE FROM settings WHERE key IN (?, ?)", ("api_key", "fetch_months"))
+conn.execute("INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)", ("scrape_delay_ms", "500"))
 _migrate_flights(conn)
 conn.execute("CREATE TABLE IF NOT EXISTS airports (id INTEGER PRIMARY KEY AUTOINCREMENT, code TEXT UNIQUE NOT NULL, name TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)")
 conn.execute("CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT)")

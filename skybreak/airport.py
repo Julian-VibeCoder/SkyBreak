@@ -1,39 +1,48 @@
 import logging, sqlite3, re
+import os
 from skybreak.airport_lookup import fetch_airport_name
 from datetime import datetime, timezone
-DB_PATH = "/data/skybreak.db"
+DB_PATH = os.environ.get("DB_FILE", "/data/skybreak.db")
 logger = logging.getLogger(__name__)
+import os
 
 def init_db():
     conn = sqlite3.connect(DB_PATH, timeout=30.0)
     conn.execute("CREATE TABLE IF NOT EXISTS airports (id INTEGER PRIMARY KEY AUTOINCREMENT, code TEXT UNIQUE NOT NULL, name TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)")
-    conn.execute("CREATE TABLE IF NOT EXISTS flights (id INTEGER PRIMARY KEY AUTOINCREMENT, airport_icao TEXT, airport_name TEXT, destination_icao TEXT, destination_name TEXT, flight_direction TEXT, departure_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP, flight_number TEXT, year_ahead INTEGER DEFAULT 365, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)")
     conn.execute("CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT)")
-    # Ensure columns exist for older DBs
+    # Migration: remove old rapid api_key and fetch_months settings; keep only fetch_max_months
+    conn.execute("DELETE FROM settings WHERE key IN (?, ?)", ("api_key", "fetch_months"))
+    # Create flights table matching app.py expectations (departure_time, etc.)
+    conn.execute("CREATE TABLE IF NOT EXISTS flights_new (id INTEGER PRIMARY KEY AUTOINCREMENT, airport_icao TEXT, airport_name TEXT, destination_icao TEXT, destination_name TEXT, flight_direction TEXT, departure_time TEXT, arrival_time TEXT, duration_minutes INTEGER, flight_number TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)")
+    # Safe migration: if old schema (departure TIME instead of departure_time) exists, rebuild
     try:
-        conn.execute("SELECT airport_name FROM flights LIMIT 1")
+        cursor = conn.execute("PRAGMA table_info(flights)")
+        columns = [row[1] for row in cursor.fetchall()]
+        if 'departure' in columns and 'departure_time' not in columns:
+            conn.execute("ALTER TABLE flights RENAME TO flights_old")
+            conn.execute("CREATE TABLE flights (id INTEGER PRIMARY KEY AUTOINCREMENT, airport_icao TEXT, airport_name TEXT, destination_icao TEXT, destination_name TEXT, flight_direction TEXT, departure_time TEXT, arrival_time TEXT, duration_minutes INTEGER, flight_number TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)")
+            try:
+                conn.execute("INSERT INTO flights SELECT airport_icao, airport_name, destination_icao, destination_name, flight_direction, datetime(flight_date || ' ' || departure), datetime(flight_date || ' ' || arrival), duration_minutes, flight_number FROM flights_old")
+            except Exception:
+                pass
+            conn.execute("DROP TABLE flights_old")
     except sqlite3.OperationalError:
-        conn.execute("ALTER TABLE flights ADD COLUMN airport_name TEXT")
+        pass
+    # Only rename if flights_new exists and flights does not
     try:
-        conn.execute("SELECT destination_name FROM flights LIMIT 1")
+        conn.execute("SELECT 1 FROM flights_new LIMIT 1")
+        conn.execute("SELECT 1 FROM flights LIMIT 1")
     except sqlite3.OperationalError:
-        conn.execute("ALTER TABLE flights ADD COLUMN destination_name TEXT")
+        pass  # one missing
     try:
-        conn.execute("SELECT flight_number FROM flights LIMIT 1")
+        conn.execute("SELECT 1 FROM flights LIMIT 1")
     except sqlite3.OperationalError:
-        conn.execute("ALTER TABLE flights ADD COLUMN flight_number TEXT")
+        conn.execute("ALTER TABLE flights_new RENAME TO flights")
     try:
-        conn.execute("SELECT year_ahead FROM flights LIMIT 1")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_flights_airport ON flights (airport_icao, departure_time)")
     except sqlite3.OperationalError:
-        conn.execute("ALTER TABLE flights ADD COLUMN year_ahead INTEGER DEFAULT 365")
-    try:
-        conn.execute("SELECT arrival_time FROM flights LIMIT 1")
-    except sqlite3.OperationalError:
-        conn.execute("ALTER TABLE flights ADD COLUMN arrival_time TIMESTAMP")
-    try:
-        conn.execute("SELECT duration_minutes FROM flights LIMIT 1")
-    except sqlite3.OperationalError:
-        conn.execute("ALTER TABLE flights ADD COLUMN duration_minutes INTEGER")
+        pass  # column may not exist yet
+    conn.execute("CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT)")
     conn.commit()
     conn.close()
 
@@ -49,7 +58,6 @@ def add_airport(code: str) -> int:
     cur = conn.execute("INSERT OR IGNORE INTO airports (code, name) VALUES (?, ?)", (code.upper(), name))
     conn.commit()
     conn.close()
-    trigger_fetch_for_airport(code.upper())
     return cur.rowcount
 
 def delete_airport(code: str) -> int:
@@ -64,64 +72,7 @@ def delete_airport(code: str) -> int:
     conn.close()
     return cur.rowcount
 
-def trigger_fetch_for_airport(code: str):
-    import sqlite3, time
-    from skybreak.scraper_job import get_latest_flight_time, save_flights
-    from datetime import datetime, timedelta
-    from skybreak.flight_scraper import fetch_flights
 
-    conn = sqlite3.connect(DB_PATH, timeout=30.0)
-    conn2 = sqlite3.connect(DB_PATH, timeout=30.0)
-    row_max = conn2.execute("SELECT MAX(departure_time) FROM flights WHERE airport_icao = ?", (code,)).fetchone()
-    conn2.close()
-    if row_max and row_max[0]:
-        latest_dt = datetime.fromisoformat(str(row_max[0]).replace("Z", "+00:00"))
-        if latest_dt.tzinfo is not None:
-            latest_dt = latest_dt.replace(tzinfo=None)
-        start_dt = latest_dt - timedelta(hours=6)
-    else:
-        start_dt = datetime.now(timezone.utc).replace(tzinfo=None)
-    max_days_raw = get_setting("fetch_max_days")
-    try:
-        max_days = int(max_days_raw)
-    except Exception:
-        max_days = 7
-    max_days = max(1, min(max_days, 365))
-    target_end = start_dt + timedelta(days=max_days)
-    wait_time = 0  # start directly until first rate limit hits; then apply backoff
-    retries = 0
-    max_retries = 3
-    current_start = start_dt
-    fetched_any = False
-    while True:
-        current_end = current_start + timedelta(hours=6)
-        if current_start >= target_end:
-            break
-        start_str = current_start.strftime("%Y-%m-%dT%H:%M")
-        end_str = current_end.strftime("%Y-%m-%dT%H:%M")
-        try:
-            data = fetch_flights(code, start_time_str=start_str, end_time_str=end_str)
-            if data:
-                save_flights(code, data)
-                fetched_any = True
-            current_start = current_end
-            retries = 0
-            if current_start >= target_end:
-                break
-        except Exception as e:
-            retries += 1
-            if retries > max_retries:
-                logger.warning("Max retries (%d) exceeded for %s at %s; giving up", max_retries, code, start_str)
-                break
-            # Rate limit retry with backoff
-            if "429" in str(e):
-                logger.info("Rate limit (429) hit for %s at window %s; backing off %ds", code, start_str, wait_time if wait_time > 0 else 30*60)
-            # First rate limit: start at 30m, then double
-            if wait_time == 0:
-                wait_time = 30 * 60
-            time.sleep(wait_time)
-            wait_time *= 2
-    conn.close()
 
 def init_settings_db():
     conn = sqlite3.connect(DB_PATH, timeout=30.0)

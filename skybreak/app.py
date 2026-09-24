@@ -147,6 +147,21 @@ def settings_check():
     max_m = get_setting("fetch_max_months") or get_setting("fetch_max_days") or ""
     return jsonify({"fetch_max_months_set": bool(max_m and max_m.strip()), "value": max_m or None})
 
+@app.route("/api/settings/delay-ms", methods=["GET", "POST"])
+def settings_delay_ms():
+    from skybreak.airport import get_setting, set_setting
+    if request.method == "POST":
+        data = request.get_json(force=True)
+        val = data.get("delay_ms")
+        if val is not None:
+            val_int = int(val)
+            set_setting("scrape_delay_ms", str(val_int))
+            return jsonify({"updated": True, "value": val_int})
+        return jsonify({"updated": False, "error": "missing delay_ms"}), 400
+    else:
+        val_str = get_setting("scrape_delay_ms") or "500"
+        return jsonify({"delay_ms": int(val_str)})
+
 @app.route("/api/settings", methods=["GET", "POST"])
 def settings():
     from skybreak.airport import get_setting, set_setting
@@ -179,8 +194,10 @@ def turnarounds():
     except Exception:
         start = datetime.now().date()
         end = start + timedelta(days=14)
-    if not start_days: start_days = [5]
-    if not end_days: end_days = [0]
+    if not start_days: start_days = [4]
+    if not end_days: end_days = [1]
+    max_trip_days_str = request.args.get('max_trip_days', '')
+    max_trip_days = int(max_trip_days_str) if max_trip_days_str and max_trip_days_str.strip().isdigit() else None
     max_dep = max_dep_str.split(':')
     max_dep_hour = int(max_dep[0]) if len(max_dep) > 0 else 23
     max_dep_min = int(max_dep[1]) if len(max_dep) > 1 else 59
@@ -188,9 +205,9 @@ def turnarounds():
     min_ret_hour = int(min_ret[0]) if len(min_ret) > 0 else 0
     min_ret_min = int(min_ret[1]) if len(min_ret) > 1 else 0
 
-    # Fetch relevant flights from DB for this range
+    # DB query: include flights where airport_icao is either from or to (XOR/inclusion)
     conn = sqlite3.connect(DB_PATH, timeout=30.0)
-    sql = "SELECT airport_icao, destination_icao, departure_time, flight_number FROM flights WHERE departure_time >= datetime('now','utc') AND departure_time <= datetime('now', '+365 days')"
+    sql = "SELECT airport_icao, destination_icao, flight_direction, departure_time, flight_number, from_icao, to_icao FROM flights WHERE departure_time >= datetime('now','utc') AND departure_time <= datetime('now', '+365 days')"
     params = []
     flights_db = conn.execute(sql, params).fetchall()
     conn.close()
@@ -205,19 +222,22 @@ def turnarounds():
         for r in flights_db:
             airport_icao = r[0] or ''
             destination_icao = r[1] or ''
-            dep_time = r[2] or ''
-            flight = r[3] or ''
-            if start_airport and airport_icao != start_airport:
+            direction = r[2] or ''
+            dep_time = r[3] or ''
+            flight = r[4] or ''
+            from_icao = r[5] or ''
+            to_icao = r[6] or ''
+            # For departure flights: from is start, to is destination (use from_icao/to_icao only)
+            if direction != 'departure':
                 continue
-            # only departure direction flights to a destination (outbound)
-            # assume departure means leaving start airport
+            # Filter by date using departure_time
             if dep_time.startswith(dt_str):
-                # parse time portion
                 try:
                     t = datetime.fromisoformat(dep_time.replace('Z', '+00:00').replace('+00:00', '') if '+' not in dep_time[-6:] else dep_time.replace('Z', '+00:00'))
                     h, m = t.hour, t.minute
                     if h < max_dep_hour or (h == max_dep_hour and m <= max_dep_min):
-                        out.append({"from": airport_icao, "to": destination_icao, "flight": flight, "time": f"{h:02d}:{m:02d}"})
+                        # Outbound from start (from_icao) to destination (to_icao)
+                        out.append({"from": from_icao, "to": to_icao, "flight": flight, "time": f"{h:02d}:{m:02d}"})
                 except Exception:
                     pass
         return out
@@ -228,17 +248,22 @@ def turnarounds():
         for r in flights_db:
             airport_icao = r[0] or ''
             destination_icao = r[1] or ''
-            dep_time = r[2] or ''
-            flight = r[3] or ''
-            # return flight must go from destination back to start airport
-            if airport_icao != dest_icao or destination_icao != start_icao:
+            direction = r[2] or ''
+            dep_time = r[3] or ''
+            flight = r[4] or ''
+            from_icao = r[5] or ''
+            to_icao = r[6] or ''
+            # Return flight: from dest (BEG) back to start (FKB) regardless of direction label
+            if from_icao != dest_icao or to_icao != start_icao:
                 continue
             if dep_time.startswith(dt_str):
                 try:
                     t = datetime.fromisoformat(dep_time.replace('Z', '+00:00').replace('+00:00', '') if '+' not in dep_time[-6:] else dep_time.replace('Z', '+00:00'))
                     h, m = t.hour, t.minute
                     if h > min_ret_hour or (h == min_ret_hour and m >= min_ret_min):
-                        ret.append({"from": airport_icao, "to": destination_icao, "flight": flight, "time": f"{h:02d}:{m:02d}"})
+                        ret_from = from_icao or airport_icao
+                        ret_to = to_icao or destination_icao
+                        ret.append({"from": ret_from, "to": ret_to, "flight": flight, "time": f"{h:02d}:{m:02d}"})
                 except Exception:
                     pass
         return ret
@@ -263,17 +288,27 @@ def turnarounds():
                                     matched_ret = rf
                                     break
                             if matched_ret:
-                                results.append({
-                                    "start": current.strftime('%Y-%m-%d'),
-                                    "end": ret.strftime('%Y-%m-%d'),
-                                    "days": duration,
-                                    "start_airport": airport_name(of['from'] or (start_airport or 'LHR')),
-                                    "dest_airport": airport_name(of['to'] or 'JFK'),
-                                    "end_airport": airport_name(start_icao or 'LHR'),
-                                    "out_flight": of['flight'] or '-',
-                                    "out_time": of['time'] or '-',
-                                    "ret_flight": matched_ret['flight'] or '-',
-                                    "ret_time": matched_ret['time'] or '-'
+                                # max_trip_days filter
+                                if max_trip_days is not None and duration > max_trip_days:
+                                    pass  # skip trip too long
+                                else:
+                                    # end_airport filter (start airport for round trip)
+                                    if end_airport:
+                                        if airport_name(start_icao or start_airport or '') != airport_name(end_airport):
+                                            # Skip if start/end airport mismatch (only when end_airport specified)
+                                            pass
+                                        else:
+                                            results.append({
+                                                                        "start": current.strftime('%Y-%m-%d'),
+                                                                        "end": ret.strftime('%Y-%m-%d'),
+                                                                        "days": duration,
+                                                                        "start_airport": airport_name(of['from'] or (start_airport or 'LHR')),
+                                                                        "dest_airport": airport_name(of['to'] or 'JFK'),
+                                                                        "end_airport": airport_name(start_icao or 'LHR'),
+                                                                        "out_flight": of['flight'] or '-',
+                                                                        "out_time": of['time'] or '-',
+                                                                        "ret_flight": matched_ret['flight'] or '-',
+                                                                        "ret_time": matched_ret['time'] or '-'
                                 })
                     else:
                         # No outbound flights on this start day

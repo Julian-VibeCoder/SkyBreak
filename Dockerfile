@@ -8,7 +8,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY skybreak/ ./skybreak/
 COPY init_db.py ./init_db.py
 COPY frontend/ ./frontend/
-RUN cd /app/frontend && npm ci && npm run build
+RUN cd frontend && npm install --prefer-offline --no-audit --no-fund && npm run build
 
 # Final: nur Runtime
 FROM python:3.11-slim

@@ -4,7 +4,16 @@ from skybreak.airport import get_setting, fetch_airport_name, init_db
 DB_PATH = os.environ.get("DB_FILE", "/data/skybreak.db")
 logger = logging.getLogger(__name__)
 
-def _run_kayak(airport, month, delay=0.5):
+def _run_kayak(airport, month, delay=None):
+    # Baumhöhe: DB-Delayed-Wert (ms) lesen, falls nicht gesetzt Fallback 0.5
+    if delay is None:
+        try:
+            conn = sqlite3.connect(DB_PATH, timeout=30)
+            row = conn.execute("SELECT value FROM settings WHERE key = ?", ("scrape_delay_ms",)).fetchone()
+            conn.close()
+            delay = float(row[0]) / 1000.0 if row and row[0] else 0.5
+        except Exception:
+            delay = 0.5
     cmd = [sys.executable, "skybreak/kayak_direct.py", airport, "-m", month, "-d", "both", "--delay", str(delay)]
     env = os.environ.copy(); env["PYTHONPATH"] = "."
     try:

@@ -23,14 +23,15 @@ export default function App() {
   const [futureInfo, setFutureInfo] = useState({});
   const [tripStart, setTripStart] = useState(new Date().toISOString().split('T')[0]);
   const [tripEnd, setTripEnd] = useState(new Date(Date.now() + 7*86400000).toISOString().split('T')[0]);
-  const [startWeekdays, setStartWeekdays] = useState([5]);
-  const [endWeekdays, setEndWeekdays] = useState([0]);
+  const [startWeekdays, setStartWeekdays] = useState([4]);
+  const [endWeekdays, setEndWeekdays] = useState([6]);
   const [maxDepToDest, setMaxDepToDest] = useState('18:00');
   const [minRetDep, setMinRetDep] = useState('10:00');
   const [maxTripDays, setMaxTripDays] = useState(5);
   const [startAirport, setStartAirport] = useState('');
   const [endAirport, setEndAirport] = useState('');
   const [turnarounds, setTurnarounds] = useState([]);
+  const [airportNames, setAirportNames] = useState({});
 
   useEffect(() => {
     if (tab === 'trips' && tripStart && tripEnd && startWeekdays.length > 0 && endWeekdays.length > 0 && maxDepToDest && minRetDep && maxTripDays) {
@@ -51,9 +52,16 @@ export default function App() {
   }, [flightDate, tab]);
   useEffect(() => {
     if (tab === 'flights') loadFlights();
-    fetch('/api/airports').then(r => r.json()).then(data => {
+          fetch('/api/airports').then(r => r.json()).then(data => {
       const codes = Array.isArray(data) ? data.map(c => typeof c === 'string' ? c : c.code || c) : [];
       setList(codes);
+      const nameMap = {};
+      data.forEach(item => {
+        const code = typeof item === 'string' ? item : item.code || item;
+        const name = typeof item === 'string' ? '' : (item.name || item.name || '');
+        if (code) nameMap[code] = name || code;
+      });
+      setAirportNames(nameMap);
     }).catch(() => setList([]));
     loadFlights();
     // Only call scrape-status as long as it is true (running)
@@ -315,25 +323,25 @@ export default function App() {
                 <div style={{ background: 'rgba(255,255,255,0.03)', borderRadius: 14, padding: 16, border: '1px solid rgba(255,255,255,0.06)' }}>
                   <label style={{ fontSize: 12, fontWeight: 600, color: '#f8fafc', display: 'block', marginBottom: 6 }}>Start Weekdays</label>
                   <select multiple value={startWeekdays.map(String)} onChange={e => setStartWeekdays([...e.target.options].filter(o => o.selected).map(o => parseInt(o.value)))} style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.15)', background: 'rgba(255,255,255,0.06)', color: '#f8fafc', fontSize: 13, height: 72 }}>
-                    <option value="0">Sunday</option>
-                    <option value="1">Monday</option>
-                    <option value="2">Tuesday</option>
-                    <option value="3">Wednesday</option>
-                    <option value="4">Thursday</option>
-                    <option value="5">Friday</option>
-                    <option value="6">Saturday</option>
+                    <option value="0">Monday</option>
+                    <option value="1">Tuesday</option>
+                    <option value="2">Wednesday</option>
+                    <option value="3">Thursday</option>
+                    <option value="4">Friday</option>
+                    <option value="5">Saturday</option>
+                    <option value="6">Sunday</option>
                   </select>
                 </div>
                 <div style={{ background: 'rgba(255,255,255,0.03)', borderRadius: 14, padding: 16, border: '1px solid rgba(255,255,255,0.06)' }}>
                   <label style={{ fontSize: 12, fontWeight: 600, color: '#f8fafc', display: 'block', marginBottom: 6 }}>End Weekdays</label>
                   <select multiple value={endWeekdays.map(String)} onChange={e => setEndWeekdays([...e.target.options].filter(o => o.selected).map(o => parseInt(o.value)))} style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.15)', background: 'rgba(255,255,255,0.06)', color: '#f8fafc', fontSize: 13, height: 72 }}>
-                    <option value="0">Sunday</option>
-                    <option value="1">Monday</option>
-                    <option value="2">Tuesday</option>
-                    <option value="3">Wednesday</option>
-                    <option value="4">Thursday</option>
-                    <option value="5">Friday</option>
-                    <option value="6">Saturday</option>
+                    <option value="0">Monday</option>
+                    <option value="1">Tuesday</option>
+                    <option value="2">Wednesday</option>
+                    <option value="3">Thursday</option>
+                    <option value="4">Friday</option>
+                    <option value="5">Saturday</option>
+                    <option value="6">Sunday</option>
                   </select>
                 </div>
                 <div style={{ background: 'rgba(255,255,255,0.03)', borderRadius: 14, padding: 16, border: '1px solid rgba(255,255,255,0.06)' }}>
@@ -386,10 +394,10 @@ export default function App() {
                       {turnarounds.map((t, i) => (
                         <tr key={i} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
                           <td style={{ padding: '6px 8px', color: '#f8fafc', fontWeight: 600 }}>
-                            {t.start_airport || 'LHR'} → {t.dest_airport || 'JFK'} ({t.out_flight || '-'}) dep {t.out_time || '-'}
+                            {airportNames[t.start_airport] || t.start_airport || 'LHR'} → {airportNames[t.dest_airport] || t.dest_airport || 'JFK'} ({t.out_flight || '-'}) dep {t.out_time || '-'}
                           </td>
                           <td style={{ padding: '6px 8px', color: '#f8fafc', fontWeight: 600 }}>
-                            {t.dest_airport || 'JFK'} → {t.end_airport || 'LHR'} ({t.ret_flight || '-'}) dep {t.ret_time || '-'}
+                            {airportNames[t.dest_airport] || t.dest_airport || 'JFK'} → {airportNames[t.end_airport] || t.end_airport || 'LHR'} ({t.ret_flight || '-'}) dep {t.ret_time || '-'}
                           </td>
                           <td style={{ padding: '6px 8px', color: '#38bdf8' }}>{t.start} → {t.end} ({t.days || '-'}d)</td>
                         </tr>
@@ -416,7 +424,7 @@ export default function App() {
               borderRadius: 18, padding: 24, boxShadow: '0 10px 30px rgba(0,0,0,0.2)'
             }}>
               <h3 style={{ margin: '0 0 14px', fontSize: 18, fontWeight: 700, color: '#f8fafc' }}>API Settings</h3>
-                              <p style={{ color: '#94a3b8', fontSize: 14, marginBottom: 16 }}>Configure max fetch months for flight data.</p>
+              <p style={{ color: '#94a3b8', fontSize: 14, marginBottom: 16 }}>Configure max fetch months and scrape delay.</p>
               <form onSubmit={async (e) => {
                 e.preventDefault();
                 const body = { fetch_max_months: document.getElementById('fetchMaxMonths')?.value || 7 };
@@ -444,6 +452,22 @@ export default function App() {
                   color: '#0f172a', fontWeight: 700, fontSize: 15, cursor: 'pointer', alignSelf: 'flex-start'
                 }}>Speichern</button>
               </form>
+              <div style={{ marginTop: 20, borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: 16 }}>
+                <h4 style={{ margin: '0 0 10px', fontSize: 15, fontWeight: 600, color: '#f8fafc' }}>Scrape Delay (ms)</h4>
+                <p style={{ color: '#94a3b8', fontSize: 13, marginBottom: 10 }}>Delay between kayak requests in milliseconds.</p>
+                <form onSubmit={async (e) => {
+                  e.preventDefault();
+                  const ms = parseInt(document.getElementById('delayMs')?.value || '500');
+                  const res = await fetch('/api/settings/delay-ms', {
+                    method: 'POST', headers: {'Content-Type':'application/json'},
+                    body: JSON.stringify({ delay_ms: ms })
+                  });
+                  if (!res.ok) alert('Failed to save delay');
+                }} style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+                  <input id="delayMs" type="number" min="0" max="5000" defaultValue="500" placeholder="ms" style={{ padding: '8px 12px', borderRadius: 10, border: '1px solid rgba(255,255,255,0.15)', background: 'rgba(255,255,255,0.06)', color: '#f8fafc', fontSize: 14, width: 140 }} />
+                  <button type="submit" style={{ padding: '8px 16px', borderRadius: 10, border: 'none', background: 'linear-gradient(135deg, #38bdf8, #818cf8)', color: '#0f172a', fontWeight: 700, fontSize: 14, cursor: 'pointer' }}>Save</button>
+                </form>
+              </div>
             </section>
           )}
         </div>
