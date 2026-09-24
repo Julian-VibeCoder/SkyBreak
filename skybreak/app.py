@@ -4,6 +4,7 @@ from flask import Flask, request, jsonify, send_from_directory
 from skybreak.airport_lookup import fetch_airport_name
 from skybreak.airport import add_airport, delete_airport, validate_iata, init_db
 import sqlite3
+import threading
 from datetime import datetime, timezone
 import os
 
@@ -13,9 +14,10 @@ DB_PATH = os.environ.get("DB_FILE", "/data/skybreak.db")
 
 app = Flask(__name__, static_folder=os.path.join(FRONTEND_BUILD_DIR, "static"), static_url_path="/static")
 
+_scrape_lock = threading.Lock()
+_scrape_in_progress = False
+
 init_db()
-from skybreak.scraper_job import start_scheduler
-start_scheduler()
 
 @app.route("/api/airports", methods=["GET"])
 def list_airports():
@@ -107,30 +109,39 @@ def future_flights_info():
             result[airport_icao] = {"max_departure_time": None, "days_ahead": None}
     return jsonify(result)
 
-fetch_in_progress = False
 
 @app.route("/api/flights/fetch-now", methods=["POST"])
+@app.route("/api/flights/fetch-now", methods=["POST"])
 def fetch_now():
-    global fetch_in_progress
-    if fetch_in_progress:
-        return jsonify({"fetched": False, "message": "Fetch already in progress"}), 409
+    global _scrape_in_progress
+    with _scrape_lock:
+        if _scrape_in_progress:
+            return jsonify({"fetched": False, "message": "Fetch already in progress"}), 409
+        _scrape_in_progress = True
     from skybreak.scraper_job import scrape_all_airports
     import threading
     def _run():
-        global fetch_in_progress
+        global _scrape_in_progress
         try:
             scrape_all_airports()
         finally:
-            fetch_in_progress = False
-    fetch_in_progress = True
+            with _scrape_lock:
+                _scrape_in_progress = False
     threading.Thread(target=_run, daemon=True).start()
     return jsonify({"fetched": True})
+
+@app.route("/api/flights/scrape-status", methods=["GET"])
+def scrape_status():
+    global _scrape_in_progress
+    with _scrape_lock:
+        running = _scrape_in_progress
+    return jsonify({"running": running})
 
 @app.route("/api/settings/check", methods=["GET"])
 def settings_check():
     from skybreak.airport import get_setting
-    key = get_setting("api_key")
-    return jsonify({"has_key": bool(key and key.strip())})
+    max_m = get_setting("fetch_max_months") or get_setting("fetch_max_days") or ""
+    return jsonify({"fetch_max_months_set": bool(max_m and max_m.strip()), "value": max_m or None})
 
 @app.route("/api/settings", methods=["GET", "POST"])
 def settings():
@@ -281,6 +292,4 @@ def turnarounds():
 
 if __name__ == "__main__":
     init_db()
-    from skybreak.scraper_job import start_scheduler
-    start_scheduler()
-    app.run(host="0.0.0.0", port=80)
+    pass
