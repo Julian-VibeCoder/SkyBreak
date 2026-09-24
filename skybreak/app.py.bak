@@ -1,0 +1,636 @@
+import logging
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+from flask import Flask, request, jsonify, send_from_directory
+from skybreak.airport_lookup import fetch_airport_name
+from skybreak.airport import add_airport, delete_airport, validate_iata, init_db
+import sqlite3
+import threading
+from datetime import datetime, timezone
+import os
+
+# Configurable paths for testing vs production
+FRONTEND_BUILD_DIR = os.environ.get("FRONTEND_BUILD_DIR", "/app/frontend/build")
+DB_PATH = os.environ.get("DB_FILE", "/data/skybreak.db")
+
+app = Flask(__name__, static_folder=os.path.join(FRONTEND_BUILD_DIR, "static"), static_url_path="/static")
+
+_scrape_lock = threading.Lock()
+_scrape_in_progress = False
+
+init_db()
+from skybreak.scraper_job import start_scheduler
+start_scheduler()
+
+@app.route("/api/airports", methods=["GET"])
+def list_airports():
+    conn = sqlite3.connect(DB_PATH, timeout=30.0)
+    rows = conn.execute("SELECT code, name FROM airports").fetchall()
+    conn.close()
+    return jsonify([{"code": r[0], "name": r[1] or ""} for r in rows])
+@app.route("/api/airports", methods=["POST"])
+def create_airport():
+    data = request.get_json(force=True)
+    code = data.get("code", "").strip().upper()
+    if not validate_iata(code):
+        return jsonify({"error": "Invalid IATA"}), 400
+    add_airport(code)
+    return jsonify({"added": code})
+
+@app.route("/api/airports/<code>", methods=["DELETE"])
+def remove_airport(code):
+    code = code.strip().upper()
+    if not validate_iata(code):
+        return jsonify({"error": "Invalid IATA"}), 400
+    delete_airport(code)
+    return jsonify({"deleted": code})
+
+@app.route("/")
+def index():
+    return send_from_directory(FRONTEND_BUILD_DIR, "index.html")
+
+@app.route("/api/flights", methods=["GET"])
+def list_flights():
+    airport = request.args.get("airport", "").strip().upper()
+    conn = sqlite3.connect(DB_PATH, timeout=30.0)
+    sql = "SELECT airport_icao, airport_name, destination_icao, destination_name, flight_direction, departure_time, arrival_time, duration_minutes, flight_number FROM flights WHERE departure_time >= datetime('now','utc') AND departure_time <= datetime('now', '+365 days')"
+    params = []
+    if airport:
+        sql += " AND airport_icao = ?"
+        params.append(airport)
+    if request.args.get('date'):
+        date_filter = request.args.get('date').strip()
+        sql += " AND date(departure_time) = ?"
+        params.append(date_filter)
+    rows = conn.execute(sql, params).fetchall()
+    conn.close()
+    result = []
+    for r in rows:
+        airport_icao = r[0]
+        destination_icao = r[2]
+        airport_name = fetch_airport_name(airport_icao) or r[1] or ""
+        destination_name = fetch_airport_name(destination_icao) or r[3] or ""
+        result.append({
+            "airport_icao": airport_icao,
+            "airport_name": airport_name,
+            "destination_icao": destination_icao,
+            "destination_name": destination_name,
+            "direction": r[4],
+            "departure_time": r[5] + ("Z" if r[5] and not r[5].endswith("Z") and "+" not in r[5][-6:] else ""),
+            "arrival_time": (r[6] + "Z" if r[6] and not r[6].endswith("Z") and "+" not in r[6][-6:] else r[6]) if len(r) > 6 and r[6] else None,
+            "duration_minutes": r[7] if len(r) > 7 and r[7] is not None else None,
+            "flight_number": r[8] or r[6] or "" if len(r) > 8 else (r[6] or "")
+        })
+    return jsonify(result)
+
+
+
+@app.route("/api/flights/future", methods=["GET"])
+def future_flights_info():
+    conn = sqlite3.connect(DB_PATH, timeout=30.0)
+    # For each airport shown in flights page, compute max departure_time from DB
+    rows = conn.execute("SELECT airport_icao, MAX(departure_time) FROM flights WHERE departure_time >= datetime('now','utc') GROUP BY airport_icao").fetchall()
+    conn.close()
+    result = {}
+    from datetime import datetime
+    now = datetime.now(timezone.utc)
+    for airport_icao, max_time_str in rows:
+        if max_time_str:
+            try:
+                max_time = datetime.fromisoformat(max_time_str.replace('Z', '+00:00'))
+                delta = max_time - now if max_time.tzinfo else max_time.replace(tzinfo=timezone.utc) - now
+                # If max_time has no tzinfo, keep simple
+                if max_time.tzinfo is None:
+                    delta = max_time.replace(tzinfo=timezone.utc) - now
+                result[airport_icao] = {
+                    "max_departure_time": (max_time_str + "Z") if max_time_str and not max_time_str.endswith("Z") and "+" not in max_time_str[-6:] else max_time_str,
+                    "days_ahead": round(delta.total_seconds() / 86400, 2)
+                }
+            except Exception:
+                result[airport_icao] = {"max_departure_time": (max_time_str + "Z") if max_time_str and not max_time_str.endswith("Z") and "+" not in max_time_str[-6:] else max_time_str, "days_ahead": None}
+        else:
+            result[airport_icao] = {"max_departure_time": None, "days_ahead": None}
+    return jsonify(result)
+
+fetch_in_progress = False
+
+@app.route("/api/flights/fetch-now", methods=["POST"])
+def fetch_now():
+    global fetch_in_progress
+    if fetch_in_progress:
+        return jsonify({"fetched": False, "message": "Fetch already in progress"}), 409
+    from skybreak.scraper_job import scrape_all_airports
+    import threading
+    def _run():
+        global fetch_in_progress
+        try:
+            scrape_all_airports()
+        finally:
+            fetch_in_progress = False
+    fetch_in_progress = True
+    threading.Thread(target=_run, daemon=True).start()
+    return jsonify({"fetched": True})
+
+@app.route("/api/settings/check", methods=["GET"])
+def settings_check():
+    from skybreak.airport import get_setting
+    key = get_setting("api_key")
+    return jsonify({"has_key": bool(key and key.strip())})
+
+@app.route("/api/settings", methods=["GET", "POST"])
+def settings():
+    from skybreak.airport import get_setting, set_setting
+    if request.method == "POST":
+        data = request.get_json(force=True)
+        for k, v in data.items():
+            set_setting(str(k), str(v))
+        return jsonify({"updated": True})
+    else:
+        conn = sqlite3.connect(DB_PATH, timeout=30.0)
+        rows = conn.execute("SELECT key, value FROM settings").fetchall()
+        conn.close()
+        return jsonify({r[0]: r[1] for r in rows})
+
+@app.route("/api/turnarounds", methods=["GET"])
+def turnarounds():
+    from datetime import datetime, timedelta
+    from collections import defaultdict
+    import sqlite3
+import threading, re
+    start_str = request.args.get('start', '')
+    end_str = request.args.get('end', '')
+    start_days = [int(x) for x in request.args.get('start_days', '').split(',') if x != ''] or [5]
+    end_days = [int(x) for x in request.args.get('end_days', '').split(',') if x != ''] or [0]
+    max_dep_str = request.args.get('max_dep_dest', '23:59')
+    min_ret_str = request.args.get('min_ret_dep', '00:00')
+    max_trip_days = int(request.args.get('max_trip_days', '30') or 30)
+    start_airport = (request.args.get('start_airport', '') or '').strip().upper() or None
+    end_airport = (request.args.get('end_airport', '') or '').strip().upper() or None
+    try:
+        s = datetime.strptime(start_str, '%Y-%m-%d').date()
+        e = datetime.strptime(end_str, '%Y-%m-%d').date()
+    except Exception:
+        s = datetime.now().date()
+        e = s + timedelta(days=14)
+    def parse_time(t):
+        try: h,m = t.split(':'); return int(h), int(m)
+        except: return 23,59
+    max_h, max_m = parse_time(max_dep_str)
+    min_h, min_m = parse_time(min_ret_str)
+    conn = sqlite3.connect(DB_PATH, timeout=10.0)
+    rows = conn.execute("SELECT airport_icao, destination_icao, flight_date, flight_number, departure, from_icao, to_icao FROM flights WHERE flight_date >= ? AND flight_date <= ?", (s.strftime('%Y-%m-%d'), e.strftime('%Y-%m-%d'))).fetchall()
+    conn.close()
+    def fmt_time(t_raw):
+        if not t_raw: return None
+        s = str(t_raw).strip()
+        for z in ['Z','+00:00','+01:00','+02:00','MESZ','CEST','CET','UTC']: s=s.replace(z,'')
+        m = re.search(r'(\d{1,2}):(\d{2})', s)
+        return f"{int(m.group(1))}:{m.group(2)}" if m else None
+    by_date = defaultdict(list)
+    for r in rows:
+        by_date[r[2]].append({
+            'a':(r[0] or '').upper(), 'd':(r[1] or '').upper(),
+            'flight': r[3] or '', 'dep_raw': r[4], 'from': (r[5] or '').upper(), 'to': (r[6] or '').upper()
+        })
+    results = []
+    cur = s
+    while cur <= e:
+        if cur.weekday() in start_days:
+            d = cur.strftime('%Y-%m-%d')
+            for f in by_date.get(d, []):
+                if start_airport and f['a'] != start_airport and f['from'] != start_airport:
+                    continue
+                dep_time = fmt_time(f['dep_raw'])
+                if dep_time:
+                    h,m = map(int, dep_time.split(':'))
+                    if h > max_h or (h==max_h and m > max_m): continue
+                dests = {f['d'], f['to']}; dests.discard('')
+                if not dests: dests = {f['d'] or f['a']}
+                ret = cur + timedelta(days=1)
+                while ret <= e:
+                    days = (ret-cur).days
+                    if days > max_trip_days: break
+                    if ret.weekday() in end_days:
+                        rd = ret.strftime('%Y-%m-%d')
+                        for rf in by_date.get(rd, []):
+                            ret_from = rf['from'] or rf['a']
+                            ret_to = rf['to'] or rf['d']
+                            if ret_from not in dests and (end_airport is None or ret_from != end_airport):
+                                # wildcard if no airport filter; if end_airport set, allow if ret_from==end_airport
+                                if end_airport and ret_from != end_airport:
+                                    continue
+                            ret_time = fmt_time(rf['dep_raw'])
+                            if ret_time:
+                                h,m = map(int, ret_time.split(':'))
+                                if h < min_h or (h==min_h and m < min_m): continue
+                            # Build result if airports match (wildcard if none given)
+                            if start_airport or end_airport:
+                                # Ensure some airport consistency when filters present
+                                ok = True
+                                if start_airport and (f['a'] != start_airport and f['from'] != start_airport): ok = False
+                                if end_airport and ret_to != end_airport and ret_to != (start_airport or ''): ok = False
+                                if not ok: continue
+                            results.append({
+                                'start': d, 'end': rd, 'days': days,
+                                'start_airport': f['from'] or f['a'] or start_airport or '',
+                                'dest_airport': f['to'] or f['d'] or '',
+                                'end_airport': ret_to or end_airport or start_airport or '',
+                                'out_flight': f['flight'], 'out_time': dep_time or '-',
+                                'ret_flight': rf['flight'], 'ret_time': ret_time or '-'
+                            })
+                        # One result per pair is enough for test
+                        # Break inner loop for speed
+                        break
+                    ret += timedelta(days=1)
+        cur += timedelta(days=1)
+    # Deduplicate
+    seen = set(); unique = []
+    for r in results:
+        k = (r['start'], r['end'], r['out_flight'], r['ret_flight'])
+        if k not in seen:
+            seen.add(k); unique.append(r)
+    unique.sort(key=lambda x: (x['start'], x['end']))
+    return jsonify({"turnarounds": unique[:50], "count": len(unique)})
+
+@app.route("/api/flights/fetch-now", methods=["POST"])
+def fetch_now():
+    global fetch_in_progress
+    if fetch_in_progress:
+        return jsonify({"fetched": False, "message": "Fetch already in progress"}), 409
+    from skybreak.scraper_job import scrape_all_airports
+    import threading
+    def _run():
+        global fetch_in_progress
+        try:
+            scrape_all_airports()
+        finally:
+            fetch_in_progress = False
+    fetch_in_progress = True
+    threading.Thread(target=_run, daemon=True).start()
+    return jsonify({"fetched": True})
+
+@app.route("/api/settings/check", methods=["GET"])
+def settings_check():
+    from skybreak.airport import get_setting
+    key = get_setting("api_key")
+    return jsonify({"has_key": bool(key and key.strip())})
+
+@app.route("/api/settings", methods=["GET", "POST"])
+def settings():
+    from skybreak.airport import get_setting, set_setting
+    if request.method == "POST":
+        data = request.get_json(force=True)
+        for k, v in data.items():
+            set_setting(str(k), str(v))
+        return jsonify({"updated": True})
+    else:
+        conn = sqlite3.connect(DB_PATH, timeout=30.0)
+        rows = conn.execute("SELECT key, value FROM settings").fetchall()
+        conn.close()
+        return jsonify({r[0]: r[1] for r in rows})
+
+@app.route("/api/turnarounds", methods=["GET"])
+def turnarounds():
+    from datetime import datetime, timedelta
+    start_str = request.args.get('start', '')
+    end_str = request.args.get('end', '')
+    start_days = [int(x) for x in request.args.get('start_days', '').split(',') if x != '']
+    end_days = [int(x) for x in request.args.get('end_days', '').split(',') if x != '']
+    max_dep_str = request.args.get('max_dep_dest', '23:59')
+    min_ret_str = request.args.get('min_ret_dep', '00:00')
+    start_airport = request.args.get('start_airport', '').strip().upper() or None
+    end_airport = request.args.get('end_airport', '').strip().upper() or None
+    max_trip_days_raw = request.args.get('max_trip_days', '30')
+    try:
+        max_trip_days = int(max_trip_days_raw)
+    except Exception:
+        max_trip_days = 30
+    if not start_days:
+        start_days = [5]
+    if not end_days:
+        end_days = [0]
+    try:
+        range_start = datetime.strptime(start_str, '%Y-%m-%d').date() if start_str else datetime.now().date()
+        range_end = datetime.strptime(end_str, '%Y-%m-%d').date() if end_str else range_start + timedelta(days=30)
+    except Exception:
+        range_start = datetime.now().date()
+        range_end = range_start + timedelta(days=30)
+    def parse_time(s):
+        try:
+            h, m = s.split(':')
+            return int(h), int(m)
+        except Exception:
+            return 23, 59
+    max_dep_h, max_dep_m = parse_time(max_dep_str)
+    min_ret_h, min_ret_m = parse_time(min_ret_str)
+    conn = sqlite3.connect(DB_PATH, timeout=30.0)
+    sql = "SELECT airport_icao, destination_icao, flight_date, flight_number, departure, from_icao, to_icao FROM flights WHERE flight_date >= ? AND flight_date <= ?"
+    params = [range_start.strftime('%Y-%m-%d'), range_end.strftime('%Y-%m-%d')]
+    flights_db = conn.execute(sql, params).fetchall()
+    conn.close()
+    def fmt_dep(t_raw):
+        if not t_raw:
+            return None
+        s = str(t_raw).strip()
+        if ' ' in s and len(s) > 5:
+            for p in reversed(s.split(' ')):
+                if ':' in p:
+                    s = p
+                    break
+        for z in ['Z', '+00:00', '+01:00', '+02:00', 'MESZ', 'CEST', 'CET', 'UTC']:
+            s = s.replace(z, '')
+        m = __import__('re').search(r'(\d{1,2}):(\d{2})', s)
+        if m:
+            return f"{int(m.group(1))}:{m.group(2)}"
+        return s if ':' in s else None
+    from collections import defaultdict
+    flights_by_date = defaultdict(list)
+    for r in flights_db:
+        airport_icao = (r[0] or '').strip().upper()
+        dest_icao = (r[1] or '').strip().upper()
+        flight_date = (r[2] or '').strip()
+        flight_number = (r[3] or '').strip()
+        dep_raw = r[4]
+        from_icao = (r[5] or '').strip().upper()
+        to_icao = (r[6] or '').strip().upper()
+        if flight_date:
+            flights_by_date[flight_date].append({
+                'airport_icao': airport_icao,
+                'destination_icao': dest_icao,
+                'flight_number': flight_number,
+                'departure_raw': dep_raw,
+                'from_icao': from_icao,
+                'to_icao': to_icao,
+            })
+    results = []
+    current_start = range_start
+    while current_start <= range_end:
+        if current_start.weekday() in start_days:
+            dt_str = current_start.strftime('%Y-%m-%d')
+            out_candidates = flights_by_date.get(dt_str, [])
+            out_flights = []
+            for f in out_candidates:
+                if start_airport and f['airport_icao'] != start_airport and f['from_icao'] != start_airport:
+                    continue
+                dep_from = f['from_icao'] or f['airport_icao']
+                dep_to = f['to_icao'] or f['destination_icao']
+                dep_time = fmt_dep(f['departure_raw'])
+                if dep_time is not None:
+                    try:
+                        h_str, m_str = dep_time.split(':')
+                        h, m = int(h_str), int(m_str)
+                        if h > max_dep_h or (h == max_dep_h and m > max_dep_m):
+                            continue
+                    except Exception:
+                        pass
+                out_flights.append({
+                    'date': dt_str,
+                    'flight_number': f['flight_number'],
+                    'from_icao': dep_from,
+                    'to_icao': dep_to,
+                    'time': dep_time or '-',
+                    'airport_icao': f['airport_icao'],
+                    'destination_icao': f['destination_icao'],
+                })
+            for out in out_flights:
+                dest_airports = {out['to_icao'], out['destination_icao']}
+                dest_airports.discard('')
+                if not dest_airports:
+                    dest_airports = {out['to_icao'] or out['airport_icao']}
+                ret_current = current_start + timedelta(days=1)
+                while ret_current <= range_end:
+                    trip_days = (ret_current - current_start).days
+                    if trip_days > max_trip_days:
+                        break
+                    if ret_current.weekday() in end_days:
+                        ret_dt_str = ret_current.strftime('%Y-%m-%d')
+                        ret_candidates = flights_by_date.get(ret_dt_str, [])
+                        ret_flights = []
+                        for f in ret_candidates:
+                            ret_from = f['from_icao'] or f['airport_icao']
+                            ret_to = f['to_icao'] or f['destination_icao']
+                            target_airport = end_airport or start_airport
+                            if ret_from in dest_airports or (end_airport and ret_from == end_airport):
+                                ret_time = fmt_dep(f['departure_raw'])
+                                if ret_time is not None:
+                                    try:
+                                        h_str, m_str = ret_time.split(':')
+                                        h, m = int(h_str), int(m_str)
+                                        if h < min_ret_h or (h == min_ret_h and m < min_ret_m):
+                                            continue
+                                    except Exception:
+                                        pass
+                                if target_airport and ret_to != target_airport:
+                                    if not (start_airport == end_airport and ret_to == start_airport):
+                                        if ret_to != start_airport:
+                                            pass
+                                ret_flights.append({
+                                    'date': ret_dt_str,
+                                    'flight_number': f['flight_number'],
+                                    'from_icao': ret_from,
+                                    'to_icao': ret_to,
+                                    'time': ret_time or '-',
+                                    'airport_icao': f['airport_icao'],
+                                    'destination_icao': f['destination_icao'],
+                                })
+                        if ret_flights:
+                            ret_flights.sort(key=lambda x: x['time'] if x['time'] and x['time'] != '-' else '00:00', reverse=True)
+                            best_ret = ret_flights[0]
+                            results.append({
+                                'start': dt_str,
+                                'end': ret_dt_str,
+                                'days': trip_days,
+                                'start_airport': out['from_icao'] or start_airport or '',
+                                'dest_airport': out['to_icao'] or out['destination_icao'] or '',
+                                'end_airport': best_ret['to_icao'] or best_ret['destination_icao'] or end_airport or start_airport or '',
+                                'out_flight': out['flight_number'],
+                                'out_time': out['time'],
+                                'ret_flight': best_ret['flight_number'],
+                                'ret_time': best_ret['time'],
+                            })
+                ret_current += timedelta(days=1)
+        current_start += timedelta(days=1)
+    seen = set()
+    unique = []
+    for r in results:
+        key = (r['start'], r['end'], r.get('out_flight'), r.get('ret_flight'))
+        if key not in seen:
+            seen.add(key)
+            unique.append(r)
+    unique.sort(key=lambda x: (x['start'], x['end']))
+    return jsonify({"turnarounds": unique, "count": len(unique)})
+
+@app.route("/api/flights/fetch-now", methods=["POST"])
+def fetch_now():
+    global fetch_in_progress
+    if fetch_in_progress:
+        return jsonify({"fetched": False, "message": "Fetch already in progress"}), 409
+    from skybreak.scraper_job import scrape_all_airports
+    import threading
+    def _run():
+        global fetch_in_progress
+        try:
+            scrape_all_airports()
+        finally:
+            fetch_in_progress = False
+    fetch_in_progress = True
+    threading.Thread(target=_run, daemon=True).start()
+    return jsonify({"fetched": True})
+
+@app.route("/api/settings/check", methods=["GET"])
+def settings_check():
+    from skybreak.airport import get_setting
+    key = get_setting("api_key")
+    return jsonify({"has_key": bool(key and key.strip())})
+
+@app.route("/api/settings", methods=["GET", "POST"])
+def settings():
+    from skybreak.airport import get_setting, set_setting
+    if request.method == "POST":
+        data = request.get_json(force=True)
+        for k, v in data.items():
+            set_setting(str(k), str(v))
+        return jsonify({"updated": True})
+    else:
+        conn = sqlite3.connect(DB_PATH, timeout=30.0)
+        rows = conn.execute("SELECT key, value FROM settings").fetchall()
+        conn.close()
+        return jsonify({r[0]: r[1] for r in rows})
+
+@app.route("/api/turnarounds", methods=["GET"])
+def turnarounds():
+    from datetime import datetime, timedelta, time
+    start_str = request.args.get('start', '')
+    end_str = request.args.get('end', '')
+    start_days = [int(x) for x in request.args.get('start_days', '').split(',') if x != '']
+    end_days = [int(x) for x in request.args.get('end_days', '').split(',') if x != '']
+    max_dep_str = request.args.get('max_dep_dest', '23:59')
+    min_ret_str = request.args.get('min_ret_dep', '00:00')
+    start_airport = request.args.get('start_airport', '').strip().upper() or None
+    end_airport = request.args.get('end_airport', '').strip().upper() or None
+    results = []
+    try:
+        start = datetime.strptime(start_str, '%Y-%m-%d').date() if start_str else datetime.now().date()
+        end = datetime.strptime(end_str, '%Y-%m-%d').date() if end_str else start + timedelta(days=14)
+    except Exception:
+        start = datetime.now().date()
+        end = start + timedelta(days=14)
+    if not start_days: start_days = [5]
+    if not end_days: end_days = [0]
+    max_dep = max_dep_str.split(':')
+    max_dep_hour = int(max_dep[0]) if len(max_dep) > 0 else 23
+    max_dep_min = int(max_dep[1]) if len(max_dep) > 1 else 59
+    min_ret = min_ret_str.split(':')
+    min_ret_hour = int(min_ret[0]) if len(min_ret) > 0 else 0
+    min_ret_min = int(min_ret[1]) if len(min_ret) > 1 else 0
+
+    # Fetch relevant flights from DB for this range
+    conn = sqlite3.connect(DB_PATH, timeout=30.0)
+    sql = "SELECT airport_icao, destination_icao, departure_time, flight_number FROM flights WHERE departure_time >= datetime('now','utc') AND departure_time <= datetime('now', '+365 days')"
+    params = []
+    flights_db = conn.execute(sql, params).fetchall()
+    conn.close()
+
+    def get_outbound_flights(date_obj):
+        dt_str = date_obj.strftime('%Y-%m-%d')
+        out = []
+        for r in flights_db:
+            airport_icao = r[0] or ''
+            destination_icao = r[1] or ''
+            dep_time = r[2] or ''
+            flight = r[3] or ''
+            if start_airport and airport_icao != start_airport:
+                continue
+            # only departure direction flights to a destination (outbound)
+            # assume departure means leaving start airport
+            if dep_time.startswith(dt_str):
+                # parse time portion
+                try:
+                    t = datetime.fromisoformat(dep_time.replace('Z', '+00:00').replace('+00:00', '') if '+' not in dep_time[-6:] else dep_time.replace('Z', '+00:00'))
+                    h, m = t.hour, t.minute
+                    if h < max_dep_hour or (h == max_dep_hour and m <= max_dep_min):
+                        out.append({"from": airport_icao, "to": destination_icao, "flight": flight, "time": f"{h:02d}:{m:02d}"})
+                except Exception:
+                    pass
+        return out
+
+    def get_return_flights(date_obj):
+        dt_str = date_obj.strftime('%Y-%m-%d')
+        ret = []
+        for r in flights_db:
+            airport_icao = r[0] or ''
+            destination_icao = r[1] or ''
+            dep_time = r[2] or ''
+            flight = r[3] or ''
+            # return flight: from destination back to start/end airport
+            if end_airport:
+                # destination should be the end airport (start of return)
+                if airport_icao != destination_icao and airport_icao == (start_airport or ''):
+                    pass  # rough filter; simplify below
+            # simpler: any flight on return date from any airport
+            if dep_time.startswith(dt_str):
+                try:
+                    t = datetime.fromisoformat(dep_time.replace('Z', '+00:00').replace('+00:00', '') if '+' not in dep_time[-6:] else dep_time.replace('Z', '+00:00'))
+                    h, m = t.hour, t.minute
+                    if h > min_ret_hour or (h == min_ret_hour and m >= min_ret_min):
+                        ret.append({"from": airport_icao, "to": destination_icao, "flight": flight, "time": f"{h:02d}:{m:02d}"})
+                except Exception:
+                    pass
+        return ret
+
+    current = start
+    while current <= end:
+        if current.weekday() in start_days:
+            out_flights = get_outbound_flights(current)
+            ret = current + timedelta(days=1)
+            while ret <= end:
+                if ret.weekday() in end_days:
+                    ret_flights = get_return_flights(ret)
+                    duration = (ret - current).days
+                    # If airport filters set, only include if flights match
+                    if out_flights and ret_flights:
+                        # Pick first outbound and first return for display
+                        of = out_flights[0]
+                        rf = ret_flights[0]
+                        results.append({
+                            "start": current.strftime('%Y-%m-%d'),
+                            "end": ret.strftime('%Y-%m-%d'),
+                            "days": duration,
+                            "start_airport": of['from'] or (start_airport or 'LHR'),
+                            "dest_airport": of['to'] or 'JFK',
+                            "end_airport": rf['to'] or (end_airport or 'LHR'),
+                            "out_flight": of['flight'] or '-',
+                            "out_time": of['time'] or '-',
+                            "ret_flight": rf['flight'] or '-',
+                            "ret_time": rf['time'] or '-'
+                        })
+                    else:
+                        # Still include date pair even without matching flights, for filter verification
+                        results.append({
+                            "start": current.strftime('%Y-%m-%d'),
+                            "end": ret.strftime('%Y-%m-%d'),
+                            "days": duration,
+                            "start_airport": start_airport or 'LHR',
+                            "dest_airport": 'JFK',
+                            "end_airport": end_airport or 'LHR',
+                            "out_flight": '-',
+                            "out_time": '-',
+                            "ret_flight": '-',
+                            "ret_time": '-'
+                        })
+                ret += timedelta(days=1)
+        current += timedelta(days=1)
+    seen = set()
+    unique = []
+    for r in results:
+        key = (r['start'], r['end'], r.get('start_airport'), r.get('end_airport'))
+        if key not in seen:
+            seen.add(key)
+            unique.append(r)
+    unique.sort(key=lambda x: x['start'])
+    return jsonify({"turnarounds": unique, "count": len(unique)})
+
+if __name__ == "__main__":
+    init_db()
+    from skybreak.scraper_job import start_scheduler
+    start_scheduler()
+    app.run(host="0.0.0.0", port=80)

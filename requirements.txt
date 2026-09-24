@@ -3,3 +3,5 @@ pytest
 requests
 tenacity
 apscheduler
+airportsdata
+requests

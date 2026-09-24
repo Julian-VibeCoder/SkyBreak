@@ -1,212 +1,131 @@
-from datetime import datetime, timedelta, timezone
-import logging
-import sqlite3
-from apscheduler.schedulers.background import BackgroundScheduler
-from skybreak.flight_scraper import fetch_flights
-
-DB_PATH = "/data/skybreak.db"
+import json, logging, sqlite3, subprocess, sys, os
+from datetime import datetime, timedelta
+from skybreak.airport import get_setting, fetch_airport_name, init_db
+DB_PATH = os.environ.get("DB_FILE", "/data/skybreak.db")
 logger = logging.getLogger(__name__)
 
-def get_latest_flight_time(airport_code):
-    conn = sqlite3.connect(DB_PATH, timeout=5)
-    # Latest flight in db for a given airport minus 6h as timestamp for each run
-    row = conn.execute(
-        "SELECT MAX(departure_time) FROM flights WHERE airport_icao = ?",
-        (airport_code,)
-    ).fetchone()
-    conn.close()
-    if row and row[0]:
-        latest = row[0]
-        # minus 6h
-        dt = datetime.fromisoformat(str(latest).replace("Z", "+00:00"))
-        # Assume DB stores UTC; keep tzinfo for arithmetic then format as UTC
-        if dt.tzinfo is None:
-            dt = dt.replace(tzinfo=timezone.utc)
-        return (dt - timedelta(hours=6)).strftime("%Y-%m-%dT%H:%M")
-    return None
+def _run_kayak(airport, month, delay=None):
+    # Baumhöhe: DB-Delayed-Wert (ms) lesen, falls nicht gesetzt Fallback 0.5
+    if delay is None:
+        try:
+            conn = sqlite3.connect(DB_PATH, timeout=30)
+            row = conn.execute("SELECT value FROM settings WHERE key = ?", ("scrape_delay_ms",)).fetchone()
+            conn.close()
+            delay = float(row[0]) / 1000.0 if row and row[0] else 0.5
+        except Exception:
+            delay = 0.5
+    cmd = [sys.executable, "skybreak/kayak_direct.py", airport, "-m", month, "-d", "both", "--delay", str(delay)]
+    env = os.environ.copy(); env["PYTHONPATH"] = "."
+    try:
+        res = subprocess.run(cmd, stdout=None, stderr=None, timeout=300, env=env)
+        logger.info("kayak %s %s finished (returncode %s)", airport, month, res.returncode)
+        return res
+    except Exception as e:
+        logger.warning("subprocess %s %s: %s", airport, month, e)
+        return None
 
-def save_flights(airport_code, flights):
-    conn = sqlite3.connect(DB_PATH, timeout=5)
-    conn.execute("CREATE TABLE IF NOT EXISTS flights (id INTEGER PRIMARY KEY AUTOINCREMENT, airport_icao TEXT, airport_name TEXT, destination_icao TEXT, destination_name TEXT, flight_direction TEXT, departure_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP, arrival_time TIMESTAMP, duration_minutes INTEGER, flight_number TEXT, year_ahead INTEGER DEFAULT 365, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)")
+def _import_kayak_json(airport):
+    path = f"{airport.upper()}_direct.json"
+    if not os.path.exists(path): return []
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        return data.get("flights", []) if isinstance(data, dict) else (data if isinstance(data, list) else [])
+    except Exception as e:
+        logger.warning("read json %s: %s", path, e)
+        return []
+
+def _clear_month(airport, month):
+    conn = sqlite3.connect(DB_PATH, timeout=30)
+    try:
+        cols = [r[1] for r in conn.execute("PRAGMA table_info(flights)").fetchall()]
+    except: cols = []
+    if "month_key" not in cols:
+        for col in ("month_key", "flight_date", "from_icao", "to_icao", "arrival_date", "airport_name", "destination_name", "flight_number", "departure", "arrival"):
+            try:
+                col_type = "TIME" if col in ("departure","arrival") else "TEXT"
+                conn.execute(f"ALTER TABLE flights ADD COLUMN {col} {col_type}")
+            except: pass
+    conn.execute("DELETE FROM flights WHERE airport_icao = ? AND (month_key = ? OR flight_date LIKE ?)", (airport.upper(), month, month+"-%"))
+    conn.commit(); conn.close()
+
+def _save_kayak(airport, flights, month):
+    conn = sqlite3.connect(DB_PATH, timeout=30)
+    conn.execute("CREATE TABLE IF NOT EXISTS flights (id INTEGER PRIMARY KEY AUTOINCREMENT, airport_icao TEXT, airport_name TEXT, destination_icao TEXT, destination_name TEXT, flight_direction TEXT, flight_date TEXT, flight_number TEXT, from_icao TEXT, to_icao TEXT, departure TIME, arrival TIME, arrival_date TEXT, duration_minutes INTEGER, month_key TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)")
+    # Migration: sicherstellen, dass alle neuen Spalten existieren
+    required = {"airport_name":"TEXT","destination_name":"TEXT","flight_date":"TEXT","flight_number":"TEXT","from_icao":"TEXT","to_icao":"TEXT","arrival_date":"TEXT","month_key":"TEXT","departure":"TIME","arrival":"TIME"}
+    try:
+        cols = {r[1]: r[2] for r in conn.execute("PRAGMA table_info(flights)").fetchall()}
+    except Exception:
+        cols = {}
+    for col, col_type in required.items():
+        if col not in cols:
+            try:
+                conn.execute(f"ALTER TABLE flights ADD COLUMN {col} {col_type}")
+                logger.info("Migrated: added column %s to flights", col)
+            except Exception as e:
+                logger.warning("Migration failed for %s: %s", col, e)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_flights_airport_month ON flights (airport_icao, month_key)")
+    airport_name = fetch_airport_name(airport.upper()) or airport.upper()
     for f in flights:
         try:
-            dep = f.get("departure") or {}
-            arr = f.get("arrival") or {}
-            dep_time_raw = dep.get("scheduledTime") or dep.get("scheduledTime", {})
-            # Parse scheduledTime: could be string or dict with "utc"/"local" keys
-            if isinstance(dep_time_raw, dict):
-                dep_time = dep_time_raw.get("utc") or dep_time_raw.get("local", "")
-            else:
-                dep_time = dep_time_raw or ""
-            # Normalize timezone suffix if it's a 19-char string without tz info
-            if dep_time and not dep_time.endswith("Z") and "+" not in dep_time[-6:] and len(dep_time) == 19:
-                dep_time += "+00:00"
-            arr_time_raw = arr.get("scheduledTime") or arr.get("scheduledTime", {})
-            if isinstance(arr_time_raw, dict):
-                arr_time = arr_time_raw.get("utc") or arr_time_raw.get("local", "")
-            else:
-                arr_time = arr_time_raw or ""
-            if arr_time and not arr_time.endswith("Z") and "+" not in arr_time[-6:] and len(arr_time) == 19:
-                arr_time += "+00:00"
-            dep_airport_icao = (dep.get("airport") or {}).get("icao") or dep.get("icao") or f.get("departure_icao") or airport_code
-            direction = "departure" if str(dep_airport_icao).upper() == str(airport_code).upper() else "arrival"
-            if direction == "departure":
-                dest_icao = (arr.get("airport") or {}).get("icao") or arr.get("icao") or f.get("arrival_icao") or f.get("destination_icao") or ""
-                dest_name = (arr.get("airport") or {}).get("name") or arr.get("name") or ""
-                if not dest_icao or str(dest_icao).upper() == str(airport_code).upper():
-                    continue
-            else:
-                dest_icao = dep_airport_icao
-                dest_name = (dep.get("airport") or {}).get("name") or dep.get("name") or ""
-                if not dest_icao or str(dest_icao).upper() == str(airport_code).upper():
-                    continue
-            flight_number = f.get("number") or f.get("flightNumber") or f.get("flight_number") or ""
-            from skybreak.airport_lookup import fetch_airport_name
-            airport_name = fetch_airport_name(airport_code) or airport_code
-            # Avoid duplicates: check if exact departure+airport+direction+destination exists
-            existing = conn.execute(
-                "SELECT 1 FROM flights WHERE airport_icao = ? AND destination_icao = ? AND flight_direction = ? AND departure_time = ? LIMIT 1",
-                (airport_code, dest_icao, direction, dep_time or arr_time)
-            ).fetchone()
-            if existing:
-                continue
-            duration_raw = f.get("duration") or {}
-            duration_minutes = None
-            if isinstance(duration_raw, dict):
-                duration_str = duration_raw.get("durationTime") or duration_raw.get("duration") or ""
-            else:
-                duration_str = str(duration_raw) if duration_raw else ""
-            if duration_str:
-                try:
-                    import re
-                    m = re.search(r'PT(\d+)H(\d+)?M?', duration_str)
-                    if m:
-                        hours = int(m.group(1))
-                        mins = int(m.group(2)) if m.group(2) else 0
-                        duration_minutes = hours * 60 + mins
-                except Exception:
-                    pass
-            arr_time_for_arrivals = arr_time
-            conn.execute(
-                "INSERT OR IGNORE INTO flights (airport_icao, airport_name, destination_icao, destination_name, flight_direction, departure_time, arrival_time, duration_minutes, flight_number, year_ahead) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                (airport_code, airport_name, dest_icao, dest_name, direction, dep_time or arr_time, arr_time if direction == 'departure' else dep_time, duration_minutes, flight_number, 365)
-            )
-            logger.debug("Saved flight: %s->%s %s at %s", airport_code, dest_icao, flight_number, dep_time)
+            date_str = f.get("date") or f.get("flight_date") or ""
+            if not date_str: continue
+            month_key = str(date_str)[:7] if len(str(date_str))>=7 else month
+            flight_number = f.get("flight_number") or f.get("flightNumber") or ""
+            from_icao = f.get("from") or f.get("from_icao") or airport.upper()
+            to_icao = f.get("to") or f.get("to_icao") or ""
+            departure_str = f.get("departure") or ""
+            arrival_str = f.get("arrival") or ""
+            arrival_date = f.get("arrival_date") or f.get("arrivalDate") or date_str
+            duration = f.get("duration_min") or f.get("duration_minutes") or f.get("duration")
+            try: duration_minutes = int(duration) if duration is not None else None
+            except: duration_minutes = None
+            direction = "departure" if str(from_icao).upper()==str(airport.upper()).upper() else "arrival"
+            dest_icao = to_icao if direction=="departure" else from_icao
+            if str(dest_icao or "").upper()==str(airport.upper()).upper(): continue
+            from skybreak.airport_lookup import fetch_airport_name as lookup_name
+            dest_name = lookup_name(dest_icao) or dest_icao
+            conn.execute("INSERT INTO flights (airport_icao, airport_name, destination_icao, destination_name, flight_direction, flight_date, flight_number, from_icao, to_icao, departure, arrival, departure_time, arrival_time, arrival_date, duration_minutes, month_key) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", (airport.upper(), airport_name, dest_icao, dest_name, direction, date_str, flight_number, from_icao, to_icao, departure_str, arrival_str, (date_str + " " + departure_str) if date_str and departure_str else None, (date_str + " " + arrival_str) if date_str and arrival_str else None, arrival_date, duration_minutes, month_key))
         except Exception as e:
-            logger.warning("Failed to save flight for %s: %s", airport_code, e)
-            continue
-    conn.commit()
-    conn.close()
+            logger.warning("save flight %s: %s", f, e)
+    conn.commit(); conn.close()
 
 def scrape_all_airports():
-    import logging, sqlite3, time
-    logger = logging.getLogger(__name__)
-    conn = sqlite3.connect(DB_PATH, timeout=5)
+    init_db()
+    conn = sqlite3.connect(DB_PATH, timeout=30)
     rows = conn.execute("SELECT code FROM airports").fetchall()
     conn.close()
+    max_raw = get_setting("fetch_max_months") or get_setting("fetch_max_days") or "3"
+    try: max_months = int(max_raw)
+    except: max_months = 3
+    max_months = max(1, min(max_months, 12))
+    now = datetime.now()
+    months = sorted({(now + timedelta(days=30*i)).strftime("%Y-%m") for i in range(max_months)})
     for (code,) in rows:
+        airport = code.upper()
         try:
-            from skybreak.airport import get_setting
-            # If there are missing flights (data not fetched completely for next 365 days) fetch until api restricts access due to rate limit
-            max_days_raw = get_setting("fetch_max_days")
-            try:
-                max_days = int(max_days_raw)
-            except Exception:
-                max_days = 7
-            max_days = max(1, min(max_days, 365))
-            conn2 = sqlite3.connect(DB_PATH, timeout=5)
-            row_max = conn2.execute("SELECT MAX(departure_time) FROM flights WHERE airport_icao = ?", (code,)).fetchone()
-            conn2.close()
-            # If there are no flights in the db, use "now" as start time stamp
-            if row_max and row_max[0]:
-                latest_dt = datetime.fromisoformat(str(row_max[0]).replace("Z", "+00:00"))
-                if latest_dt.tzinfo is not None:
-                    latest_dt = latest_dt.replace(tzinfo=None)
-                # Use the latest flight in the db for a given airport minus 6h as timestamp for each run of the schedule
-                start_dt = latest_dt - timedelta(hours=6)
-            else:
-                start_dt = datetime.now(timezone.utc)
-            # We are still only able to fix 6 hours with a single api call
-            # Fetch continuously until we cover 365 days ahead or rate limit stops us
-            target_end = start_dt + timedelta(days=max_days)
-            wait_time = 0  # start directly until first rate limit hits; then apply backoff
-            retries = 0
-            max_retries = 3
-            # We must fetch all windows continuously; when successful, next 6h directly after previous
-            current_start = start_dt
-            fetched_any = False
-            # Continue fetching until target 365 days ahead covered or persistent rate limit
-            while True:
-                current_end = current_start + timedelta(hours=6)
-                # Stop if we've covered the full 365-day range
-                if current_start >= target_end:
-                    break
-                start_str = current_start.strftime("%Y-%m-%dT%H:%M")
-                end_str = current_end.strftime("%Y-%m-%dT%H:%M")
-                try:
-                    data = fetch_flights(code, start_time_str=start_str, end_time_str=end_str)
-                    if data:
-                        save_flights(code, data)
-                        fetched_any = True
-                        logger.info("Batch fetched %d flights for %s (window %s to %s)", len(data), code, start_str, end_str)
-                        current_start = current_end
-                        retries = 0
-                        if current_start >= target_end:
-                            break
-                    else:
-                        # Leere API-Antwort: Fenster nicht verschieben -> keine Lücke
-                        # Aber harte fetch_max_days-Grenze nicht ignorieren
-                        if current_start + timedelta(hours=6) >= target_end:
-                            # Keine Daten mehr im erlaubten Fenster: abbrechen
-                            current_start = current_end
-                            break
-                except Exception as e:
-                    retries += 1
-                    if retries > max_retries:
-                        logger.warning("Max retries (%d) exceeded for %s at %s; giving up on this window", max_retries, code, start_str)
-                        break
-                    # Rate limit or other failure
-                    logger.info("API call failed for %s at window %s: %s (retry %d/%d)", code, start_str, e, retries, max_retries)
-                    if "429" in str(e):
-                        logger.warning("Rate limit (429) hit for %s at window %s; backing off %ds before retry", code, start_str, wait_time if wait_time > 0 else 30*60)
-                    # Wait before retry; double each time rate limit still occurs
-                    logger.info("Waiting %d seconds for %s before retry", wait_time, code)
-                    # First rate limit: start at 30m, then double
-                    if wait_time == 0:
-                        wait_time = 30 * 60
-                    time.sleep(wait_time)
-                    wait_time *= 2
-                    # Try same window again after wait; don't advance until successful
-            if not fetched_any:
-                logger.info("No new flights fetched for %s in this run", code)
+            for month in months:
+                logger.info("Kayak fetch %s %s", airport, month)
+                _clear_month(airport, month)
+                res = _run_kayak(airport, month)
+                flights = _import_kayak_json(airport)
+                _save_kayak(airport, flights, month)
+                logger.info("Saved %d flights for %s %s", len(flights), airport, month)
         except Exception as e:
-            logger.info("Batch fetch failed for %s: %s", code, e)
-            pass
+            logger.info("Kayak fetch failed %s: %s", airport, e)
 
 def start_scheduler():
-    from skybreak.airport import get_setting
-    try:
-        raw = get_setting("fetch_interval_minutes") or "30"
-        interval = int(raw)
-    except Exception:
-        interval = 30
-    import logging
-    if interval == 0:
-        logging.getLogger(__name__).info("Scheduler disabled (interval set to 0)")
-        return
-    # Allow up to one week (10080 minutes)
+    from apscheduler.schedulers.background import BackgroundScheduler
+    try: interval = int(get_setting("fetch_interval_minutes") or "30")
+    except: interval = 30
+    if interval == 0: logger.info("Scheduler disabled"); return
     interval = max(1, min(interval, 10080))
-    logging.getLogger(__name__).info("Scheduler interval set to %s minutes", interval)
     scheduler = BackgroundScheduler()
     scheduler.add_job(scrape_all_airports, "interval", minutes=interval)
-    scheduler.add_job(clean_old_flights, "interval", minutes=interval)
     scheduler.start()
 
 def clean_old_flights():
-    import sqlite3
     conn = sqlite3.connect(DB_PATH, timeout=5)
-    conn.execute("DELETE FROM flights WHERE departure_time < datetime('now')")
-    conn.commit()
-    deleted = conn.total_changes
-    conn.close()
-    return deleted
+    conn.execute("DELETE FROM flights WHERE flight_date < date('now') OR (flight_date IS NULL AND departure < datetime('now'))")
+    conn.commit(); conn.close()

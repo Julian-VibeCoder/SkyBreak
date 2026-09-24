@@ -1,11 +1,8 @@
 version: "3.9"
 services:
-  app:
+  flightbreak:
+    image: skybreak-local
     build: .
     volumes: ["/opt/skybreak/:/data/"]
-    ports: ["80:80"]
-    command: python -m skybreak.app
-  frontend:
-    image: nginx:alpine
-    volumes: ["./frontend:/usr/share/nginx/html:ro"]
-    ports: ["8080:80"]
+    ports: ["8088:80"]
+    command: python -u -m flask --app skybreak/app run --host=0.0.0.0 --port=80

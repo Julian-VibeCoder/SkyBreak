@@ -4,6 +4,7 @@ from flask import Flask, request, jsonify, send_from_directory
 from skybreak.airport_lookup import fetch_airport_name
 from skybreak.airport import add_airport, delete_airport, validate_iata, init_db
 import sqlite3
+import threading
 from datetime import datetime, timezone
 import os
 
@@ -13,9 +14,10 @@ DB_PATH = os.environ.get("DB_FILE", "/data/skybreak.db")
 
 app = Flask(__name__, static_folder=os.path.join(FRONTEND_BUILD_DIR, "static"), static_url_path="/static")
 
+_scrape_lock = threading.Lock()
+_scrape_in_progress = False
+
 init_db()
-from skybreak.scraper_job import start_scheduler
-start_scheduler()
 
 @app.route("/api/airports", methods=["GET"])
 def list_airports():
@@ -71,6 +73,10 @@ def list_flights():
             "destination_icao": destination_icao,
             "destination_name": destination_name,
             "direction": r[4],
+            "from_icao": destination_icao if r[4] == 'arrival' else airport_icao,
+            "from_airport_name": (fetch_airport_name(destination_icao) or r[3] or "") if r[4] == 'arrival' else airport_name,
+            "to_icao": airport_icao if r[4] == 'arrival' else destination_icao,
+            "to_airport_name": airport_name if r[4] == 'arrival' else destination_name,
             "departure_time": r[5] + ("Z" if r[5] and not r[5].endswith("Z") and "+" not in r[5][-6:] else ""),
             "arrival_time": (r[6] + "Z" if r[6] and not r[6].endswith("Z") and "+" not in r[6][-6:] else r[6]) if len(r) > 6 and r[6] else None,
             "duration_minutes": r[7] if len(r) > 7 and r[7] is not None else None,
@@ -107,30 +113,54 @@ def future_flights_info():
             result[airport_icao] = {"max_departure_time": None, "days_ahead": None}
     return jsonify(result)
 
-fetch_in_progress = False
 
 @app.route("/api/flights/fetch-now", methods=["POST"])
+@app.route("/api/flights/fetch-now", methods=["POST"])
 def fetch_now():
-    global fetch_in_progress
-    if fetch_in_progress:
-        return jsonify({"fetched": False, "message": "Fetch already in progress"}), 409
+    global _scrape_in_progress
+    with _scrape_lock:
+        if _scrape_in_progress:
+            return jsonify({"fetched": False, "message": "Fetch already in progress"}), 409
+        _scrape_in_progress = True
     from skybreak.scraper_job import scrape_all_airports
     import threading
     def _run():
-        global fetch_in_progress
+        global _scrape_in_progress
         try:
             scrape_all_airports()
         finally:
-            fetch_in_progress = False
-    fetch_in_progress = True
+            with _scrape_lock:
+                _scrape_in_progress = False
     threading.Thread(target=_run, daemon=True).start()
     return jsonify({"fetched": True})
+
+@app.route("/api/flights/scrape-status", methods=["GET"])
+def scrape_status():
+    global _scrape_in_progress
+    with _scrape_lock:
+        running = _scrape_in_progress
+    return jsonify({"running": running})
 
 @app.route("/api/settings/check", methods=["GET"])
 def settings_check():
     from skybreak.airport import get_setting
-    key = get_setting("api_key")
-    return jsonify({"has_key": bool(key and key.strip())})
+    max_m = get_setting("fetch_max_months") or get_setting("fetch_max_days") or ""
+    return jsonify({"fetch_max_months_set": bool(max_m and max_m.strip()), "value": max_m or None})
+
+@app.route("/api/settings/delay-ms", methods=["GET", "POST"])
+def settings_delay_ms():
+    from skybreak.airport import get_setting, set_setting
+    if request.method == "POST":
+        data = request.get_json(force=True)
+        val = data.get("delay_ms")
+        if val is not None:
+            val_int = int(val)
+            set_setting("scrape_delay_ms", str(val_int))
+            return jsonify({"updated": True, "value": val_int})
+        return jsonify({"updated": False, "error": "missing delay_ms"}), 400
+    else:
+        val_str = get_setting("scrape_delay_ms") or "500"
+        return jsonify({"delay_ms": int(val_str)})
 
 @app.route("/api/settings", methods=["GET", "POST"])
 def settings():
@@ -164,8 +194,10 @@ def turnarounds():
     except Exception:
         start = datetime.now().date()
         end = start + timedelta(days=14)
-    if not start_days: start_days = [5]
-    if not end_days: end_days = [0]
+    if not start_days: start_days = [4]
+    if not end_days: end_days = [1]
+    max_trip_days_str = request.args.get('max_trip_days', '')
+    max_trip_days = int(max_trip_days_str) if max_trip_days_str and max_trip_days_str.strip().isdigit() else None
     max_dep = max_dep_str.split(':')
     max_dep_hour = int(max_dep[0]) if len(max_dep) > 0 else 23
     max_dep_min = int(max_dep[1]) if len(max_dep) > 1 else 59
@@ -173,12 +205,16 @@ def turnarounds():
     min_ret_hour = int(min_ret[0]) if len(min_ret) > 0 else 0
     min_ret_min = int(min_ret[1]) if len(min_ret) > 1 else 0
 
-    # Fetch relevant flights from DB for this range
+    # DB query: include flights where airport_icao is either from or to (XOR/inclusion)
     conn = sqlite3.connect(DB_PATH, timeout=30.0)
-    sql = "SELECT airport_icao, destination_icao, departure_time, flight_number FROM flights WHERE departure_time >= datetime('now','utc') AND departure_time <= datetime('now', '+365 days')"
+    sql = "SELECT airport_icao, destination_icao, flight_direction, departure_time, flight_number, from_icao, to_icao FROM flights WHERE departure_time >= datetime('now','utc') AND departure_time <= datetime('now', '+365 days')"
     params = []
     flights_db = conn.execute(sql, params).fetchall()
     conn.close()
+
+    def airport_name(code):
+        from skybreak.airport_lookup import fetch_airport_name
+        return fetch_airport_name(code) or code
 
     def get_outbound_flights(date_obj):
         dt_str = date_obj.strftime('%Y-%m-%d')
@@ -186,43 +222,48 @@ def turnarounds():
         for r in flights_db:
             airport_icao = r[0] or ''
             destination_icao = r[1] or ''
-            dep_time = r[2] or ''
-            flight = r[3] or ''
-            if start_airport and airport_icao != start_airport:
+            direction = r[2] or ''
+            dep_time = r[3] or ''
+            flight = r[4] or ''
+            from_icao = r[5] or ''
+            to_icao = r[6] or ''
+            # For departure flights: from is start, to is destination (use from_icao/to_icao only)
+            if direction != 'departure':
                 continue
-            # only departure direction flights to a destination (outbound)
-            # assume departure means leaving start airport
+            # Filter by date using departure_time
             if dep_time.startswith(dt_str):
-                # parse time portion
                 try:
                     t = datetime.fromisoformat(dep_time.replace('Z', '+00:00').replace('+00:00', '') if '+' not in dep_time[-6:] else dep_time.replace('Z', '+00:00'))
                     h, m = t.hour, t.minute
                     if h < max_dep_hour or (h == max_dep_hour and m <= max_dep_min):
-                        out.append({"from": airport_icao, "to": destination_icao, "flight": flight, "time": f"{h:02d}:{m:02d}"})
+                        # Outbound from start (from_icao) to destination (to_icao)
+                        out.append({"from": from_icao, "to": to_icao, "flight": flight, "time": f"{h:02d}:{m:02d}"})
                 except Exception:
                     pass
         return out
 
-    def get_return_flights(date_obj):
+    def get_return_flights(date_obj, dest_icao, start_icao):
         dt_str = date_obj.strftime('%Y-%m-%d')
         ret = []
         for r in flights_db:
             airport_icao = r[0] or ''
             destination_icao = r[1] or ''
-            dep_time = r[2] or ''
-            flight = r[3] or ''
-            # return flight: from destination back to start/end airport
-            if end_airport:
-                # destination should be the end airport (start of return)
-                if airport_icao != destination_icao and airport_icao == (start_airport or ''):
-                    pass  # rough filter; simplify below
-            # simpler: any flight on return date from any airport
+            direction = r[2] or ''
+            dep_time = r[3] or ''
+            flight = r[4] or ''
+            from_icao = r[5] or ''
+            to_icao = r[6] or ''
+            # Return flight: from dest (BEG) back to start (FKB) regardless of direction label
+            if from_icao != dest_icao or to_icao != start_icao:
+                continue
             if dep_time.startswith(dt_str):
                 try:
                     t = datetime.fromisoformat(dep_time.replace('Z', '+00:00').replace('+00:00', '') if '+' not in dep_time[-6:] else dep_time.replace('Z', '+00:00'))
                     h, m = t.hour, t.minute
                     if h > min_ret_hour or (h == min_ret_hour and m >= min_ret_min):
-                        ret.append({"from": airport_icao, "to": destination_icao, "flight": flight, "time": f"{h:02d}:{m:02d}"})
+                        ret_from = from_icao or airport_icao
+                        ret_to = to_icao or destination_icao
+                        ret.append({"from": ret_from, "to": ret_to, "flight": flight, "time": f"{h:02d}:{m:02d}"})
                 except Exception:
                     pass
         return ret
@@ -234,39 +275,44 @@ def turnarounds():
             ret = current + timedelta(days=1)
             while ret <= end:
                 if ret.weekday() in end_days:
-                    ret_flights = get_return_flights(ret)
                     duration = (ret - current).days
-                    # If airport filters set, only include if flights match
-                    if out_flights and ret_flights:
-                        # Pick first outbound and first return for display
-                        of = out_flights[0]
-                        rf = ret_flights[0]
-                        results.append({
-                            "start": current.strftime('%Y-%m-%d'),
-                            "end": ret.strftime('%Y-%m-%d'),
-                            "days": duration,
-                            "start_airport": of['from'] or (start_airport or 'LHR'),
-                            "dest_airport": of['to'] or 'JFK',
-                            "end_airport": rf['to'] or (end_airport or 'LHR'),
-                            "out_flight": of['flight'] or '-',
-                            "out_time": of['time'] or '-',
-                            "ret_flight": rf['flight'] or '-',
-                            "ret_time": rf['time'] or '-'
-                        })
+                    if out_flights:
+                        # For each outbound, find matching return from dest to start
+                        for of in out_flights:
+                            dest_icao = of['to']
+                            start_icao = start_airport or of['from']
+                            ret_flights = get_return_flights(ret, dest_icao, start_icao)
+                            matched_ret = None
+                            for rf in ret_flights:
+                                if rf['from'] == dest_icao and rf['to'] == start_icao:
+                                    matched_ret = rf
+                                    break
+                            if matched_ret:
+                                # max_trip_days filter
+                                if max_trip_days is not None and duration > max_trip_days:
+                                    pass  # skip trip too long
+                                else:
+                                    # end_airport filter (start airport for round trip)
+                                    if end_airport:
+                                        if airport_name(start_icao or start_airport or '') != airport_name(end_airport):
+                                            # Skip if start/end airport mismatch (only when end_airport specified)
+                                            pass
+                                        else:
+                                            results.append({
+                                                                        "start": current.strftime('%Y-%m-%d'),
+                                                                        "end": ret.strftime('%Y-%m-%d'),
+                                                                        "days": duration,
+                                                                        "start_airport": airport_name(of['from'] or (start_airport or 'LHR')),
+                                                                        "dest_airport": airport_name(of['to'] or 'JFK'),
+                                                                        "end_airport": airport_name(start_icao or 'LHR'),
+                                                                        "out_flight": of['flight'] or '-',
+                                                                        "out_time": of['time'] or '-',
+                                                                        "ret_flight": matched_ret['flight'] or '-',
+                                                                        "ret_time": matched_ret['time'] or '-'
+                                })
                     else:
-                        # Still include date pair even without matching flights, for filter verification
-                        results.append({
-                            "start": current.strftime('%Y-%m-%d'),
-                            "end": ret.strftime('%Y-%m-%d'),
-                            "days": duration,
-                            "start_airport": start_airport or 'LHR',
-                            "dest_airport": 'JFK',
-                            "end_airport": end_airport or 'LHR',
-                            "out_flight": '-',
-                            "out_time": '-',
-                            "ret_flight": '-',
-                            "ret_time": '-'
-                        })
+                        # No outbound flights on this start day
+                        pass
                 ret += timedelta(days=1)
         current += timedelta(days=1)
     seen = set()
@@ -281,6 +327,4 @@ def turnarounds():
 
 if __name__ == "__main__":
     init_db()
-    from skybreak.scraper_job import start_scheduler
-    start_scheduler()
     app.run(host="0.0.0.0", port=80)
