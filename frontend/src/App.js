@@ -19,43 +19,58 @@ export default function App() {
       const [expanded, setExpanded] = useState({});
     const toggle = (c) => setExpanded(e => ({...e, [c]: !e[c]}));
     const [flightDate, setFlightDate] = useState(new Date().toISOString().split('T')[0]);
+  const [scrapeRunning, setScrapeRunning] = useState(false);
   const [futureInfo, setFutureInfo] = useState({});
-  const [apiKeyValue, setApiKeyValue] = useState(''); const [hasApiKey, setHasApiKey] = useState(false);
   const [tripStart, setTripStart] = useState(new Date().toISOString().split('T')[0]);
   const [tripEnd, setTripEnd] = useState(new Date(Date.now() + 7*86400000).toISOString().split('T')[0]);
   const [startWeekdays, setStartWeekdays] = useState([5]);
   const [endWeekdays, setEndWeekdays] = useState([0]);
   const [maxDepToDest, setMaxDepToDest] = useState('18:00');
   const [minRetDep, setMinRetDep] = useState('10:00');
+  const [maxTripDays, setMaxTripDays] = useState(5);
   const [startAirport, setStartAirport] = useState('');
   const [endAirport, setEndAirport] = useState('');
   const [turnarounds, setTurnarounds] = useState([]);
 
   useEffect(() => {
-    if (tab === 'trips' && tripStart && tripEnd && startWeekdays.length > 0 && endWeekdays.length > 0 && maxDepToDest && minRetDep) {
+    if (tab === 'trips' && tripStart && tripEnd && startWeekdays.length > 0 && endWeekdays.length > 0 && maxDepToDest && minRetDep && maxTripDays) {
       const params = new URLSearchParams({
         start: tripStart, end: tripEnd,
         start_days: startWeekdays.join(','), end_days: endWeekdays.join(','),
-        max_dep_dest: maxDepToDest, min_ret_dep: minRetDep
+        max_dep_dest: maxDepToDest, min_ret_dep: minRetDep, max_trip_days: maxTripDays
       });
       if (startAirport) params.append('start_airport', startAirport);
       if (endAirport) params.append('end_airport', endAirport);
+      params.append('max_trip_days', maxTripDays);
       fetch('/api/turnarounds?' + params.toString()).then(r => r.json()).then(data => setTurnarounds(data.turnarounds || data.results || [])).catch(() => setTurnarounds([]));
     }
-  }, [tab, tripStart, tripEnd, startWeekdays, endWeekdays, maxDepToDest, minRetDep, startAirport, endAirport]);
+  }, [tab, tripStart, tripEnd, startWeekdays, endWeekdays, maxDepToDest, minRetDep, startAirport, endAirport, maxTripDays]);
 
   useEffect(() => {
     if (tab === 'flights') loadFlights();
-    fetch('/api/settings/check').then(r => r.json()).then(data => {
-      const has = !!(data && data.has_key);
-      setHasApiKey(has);
-      if (has) setApiKeyValue('••••••••'); else setApiKeyValue('');
-    }).catch(() => { setHasApiKey(false); setApiKeyValue(''); });
+  }, [flightDate, tab]);
+  useEffect(() => {
+    if (tab === 'flights') loadFlights();
     fetch('/api/airports').then(r => r.json()).then(data => {
       const codes = Array.isArray(data) ? data.map(c => typeof c === 'string' ? c : c.code || c) : [];
       setList(codes);
     }).catch(() => setList([]));
     loadFlights();
+    // Only call scrape-status as long as it is true (running)
+    const check = () => {
+      fetch('/api/flights/scrape-status').then(r => r.json()).then(d => {
+        if (d.running) {
+          setScrapeRunning(true);
+          // keep checking while true
+          setTimeout(check, 2000);
+        } else {
+          setScrapeRunning(false);
+        }
+      }).catch(() => setScrapeRunning(false));
+    };
+    check();
+    // No fixed interval; only poll when running
+    return () => {};
   }, []);
 
   const loadFlights = () => {
@@ -64,6 +79,15 @@ export default function App() {
     if (airport) url += 'airport=' + airport + '&';
     if (flightDate) url += 'date=' + flightDate;
     fetch(url).then(r => r.json()).then(data => { setFlights(data); fetch('/api/flights/future').then(r => r.json()).then(setFutureInfo).catch(() => setFutureInfo({})); }).catch(() => setFlights([]));
+  };
+
+  const checkScrape = () => {
+    fetch('/api/flights/scrape-status').then(r => r.json()).then(d => {
+      setScrapeRunning(!!d.running);
+      if (d.running) {
+        setTimeout(checkScrape, 2000);
+      }
+    }).catch(() => setScrapeRunning(false));
   };
 
   const submit = async (e) => {
@@ -203,7 +227,20 @@ export default function App() {
               background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)',
               borderRadius: 18, padding: 24, boxShadow: '0 10px 30px rgba(0,0,0,0.2)'
             }}>
-              <h3 style={{ margin: '0 0 14px', fontSize: 18, fontWeight: 700, color: '#f8fafc' }}>Flight Schedule</h3><div style={{ display: 'flex', gap: 10, marginBottom: 16, flexWrap: 'wrap' }}><input type='date' value={flightDate} onChange={e => { setFlightDate(e.target.value); loadFlights(); }} style={{ padding: '10px 14px', borderRadius: 10, border: '1px solid rgba(255,255,255,0.15)', background: 'rgba(255,255,255,0.06)', color: '#f8fafc', fontSize: 15 }} /><button onClick={loadFlights} style={{ padding: '10px 18px', borderRadius: 10, border: 'none', background: 'linear-gradient(135deg,#38bdf8,#818cf8)', color: '#0f172a', fontWeight: 700, cursor: 'pointer' }}>Refresh</button><button onClick={async () => { await fetch('/api/flights/fetch-now', { method: 'POST' }); loadFlights(); }} style={{ padding: '10px 18px', borderRadius: 10, border: 'none', background: 'linear-gradient(135deg,#10b981,#059669)', color: '#fff', fontWeight: 700, cursor: 'pointer' }}>Fetch Now</button></div>
+<h3 style={{ margin: '0 0 14px', fontSize: 18, fontWeight: 700, color: '#f8fafc' }}>Flight Schedule</h3>
+              <div style={{ display: 'flex', gap: 10, marginBottom: 16, flexWrap: 'wrap', alignItems: 'center' }}>
+                <input type='date' value={flightDate} onChange={e => { setFlightDate(e.target.value); loadFlights(); }} style={{ padding: '10px 14px', borderRadius: 10, border: '1px solid rgba(255,255,255,0.15)', background: 'rgba(255,255,255,0.06)', color: '#f8fafc', fontSize: 15 }} />
+                <button onClick={() => setFlightDate(new Date(new Date(flightDate).getTime() - 86400000).toISOString().split('T')[0])} style={{ padding: '10px 14px', borderRadius: 10, border: 'none', background: 'linear-gradient(135deg,#6366f1,#4f46e5)', color: '#fff', fontWeight: 700, cursor: 'pointer', fontSize: 13 }}>◀ Vorheriger Tag</button>
+                <button onClick={() => setFlightDate(new Date().toISOString().split('T')[0])} style={{ padding: '10px 14px', borderRadius: 10, border: 'none', background: 'linear-gradient(135deg,#f59e0b,#d97706)', color: '#fff', fontWeight: 700, cursor: 'pointer', fontSize: 13 }}>Heute</button>
+                <button onClick={() => setFlightDate(new Date(new Date(flightDate).getTime() + 86400000).toISOString().split('T')[0])} style={{ padding: '10px 14px', borderRadius: 10, border: 'none', background: 'linear-gradient(135deg,#6366f1,#4f46e5)', color: '#fff', fontWeight: 700, cursor: 'pointer', fontSize: 13 }}>Nächster Tag ▶</button>
+                <button onClick={async () => { await fetch('/api/flights/fetch-now', { method: 'POST' }); }} style={{ padding: '10px 18px', borderRadius: 10, border: 'none', background: 'linear-gradient(135deg,#10b981,#059669)', color: '#fff', fontWeight: 700, cursor: 'pointer' }}>Fetch Now</button>
+                {scrapeRunning && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 12px', borderRadius: 8, background: 'rgba(16,185,129,0.15)', border: '1px solid rgba(16,185,129,0.35)' }}>
+                    <div style={{ width: 16, height: 4, borderRadius: 2, background: 'linear-gradient(90deg,#10b981,#34d399,#10b981)', animation: 'pulse 1.5s infinite', backgroundSize: '200% 100%' }} />
+                    <span style={{ fontSize: 12, color: '#34d399', fontWeight: 600 }}>Scraping läuft…</span>
+                  </div>
+                )}
+              </div>
               {list.map(airport => {
                 const arr = flights.filter(f => f.airport_icao === airport && f.direction === 'arrival');
                 const dep = flights.filter(f => f.airport_icao === airport && f.direction === 'departure');
@@ -221,13 +258,15 @@ export default function App() {
                       <div>
                         <strong style={{ color: '#4ade80', fontSize: 13 }}>Arrivals ({arr.length})</strong>
                         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, marginTop: 6 }}>
-                          <thead><tr style={{ borderBottom: '1px solid rgba(255,255,255,0.1)' }}><th style={{ textAlign: 'left', padding: '4px 8px', color: '#94a3b8' }}>From</th><th style={{ textAlign: 'left', padding: '4px 8px', color: '#94a3b8' }}>Flight</th><th style={{ textAlign: 'left', padding: '4px 8px', color: '#94a3b8' }}>Departure</th><th style={{ textAlign: 'left', padding: '4px 8px', color: '#94a3b8' }}>Duration</th></tr></thead>
+                          <thead><tr style={{ borderBottom: '1px solid rgba(255,255,255,0.1)' }}><th style={{ textAlign: 'left', padding: '4px 8px', color: '#94a3b8' }}>From</th><th style={{ textAlign: 'left', padding: '4px 8px', color: '#94a3b8' }}>Flight</th><th style={{ textAlign: 'left', padding: '4px 8px', color: '#94a3b8' }}>Departure</th><th style={{ textAlign: 'left', padding: '4px 8px', color: '#94a3b8' }}>Arrival</th><th style={{ textAlign: 'left', padding: '4px 8px', color: '#94a3b8' }}>Duration</th></tr></thead>
                           <tbody>
-                            {arr.length === 0 && <tr><td colSpan="4" style={{ padding: '4px 8px', color: '#94a3b8' }}>No arrivals</td></tr>}
+                            {arr.length === 0 && <tr><td colSpan="5" style={{ padding: '4px 8px', color: '#94a3b8' }}>No arrivals</td></tr>}
                             {arr.map(a => <tr key={a.id || a.destination_icao + a.departure_time} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
-                              <td style={{ padding: '4px 8px' }}>{a.destination_name ? a.destination_name + ' (' + a.destination_icao + ')' : a.destination_icao}</td>
+                                                              <td style={{ padding: '4px 8px' }}>{a.from_icao ? (a.from_airport_name ? a.from_airport_name + ' (' + a.from_icao + ')' : (a.from_icao || a.airport_icao || airport)) : (a.airport_icao || airport)}</td>
                               <td style={{ padding: '4px 8px', fontWeight: 600 }}>{a.flight_number || '-'}</td>
-                              <td style={{ padding: '4px 8px' }}>{a.departure_time ? (() => { const ts = a.departure_time; const dtLocal = new Date(ts.endsWith("Z") ? ts : ts + (ts.includes("+") || ts.includes("Z") ? "" : "+00:00")); return dtLocal.toLocaleString('de-DE', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit', timeZoneName: 'short' }) + ' (UTC→local)'; })() : '-'}</td>
+                                                              <td style={{ padding: '4px 8px', color: '#38bdf8' }}>{a.departure_time ? (() => { const ts = a.departure_time; if (!ts) return '-'; const m = ts.match(/(\d{1,2}):(\d{2})/); if (m) return m[1] + ':' + m[2]; return ts.includes(':') ? ts.split(':').slice(0,2).join(':') : '-'; })() : '-'}</td>
+                                                              <td style={{ padding: '4px 8px', color: '#4ade80' }}>{a.arrival_time ? (() => { const ts = a.arrival_time; if (!ts) return '-'; const m = ts.match(/(\d{1,2}):(\d{2})/); if (m) return m[1] + ':' + m[2]; return ts.includes(':') ? ts.split(':').slice(0,2).join(':') : '-'; })() : '-'}</td>
+                              <td style={{ padding: '4px 8px', color: '#818cf8' }}>{a.duration_minutes ? a.duration_minutes + ' min' : '-'}</td>
                             </tr>)}
                           </tbody>
                         </table>
@@ -241,8 +280,8 @@ export default function App() {
                             {dep.map(d => <tr key={d.id || d.destination_icao + d.departure_time} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
                               <td style={{ padding: '4px 8px' }}>{d.destination_name ? d.destination_name + ' (' + d.destination_icao + ')' : d.destination_icao}</td>
                               <td style={{ padding: '4px 8px', fontWeight: 600 }}>{d.flight_number || '-'}</td>
-                              <td style={{ padding: '4px 8px', color: '#38bdf8' }}>{d.departure_time ? (() => { const ts = d.departure_time; const dtLocal = new Date(ts.endsWith("Z") ? ts : ts + (ts.includes("+") || ts.includes("Z") ? "" : "+00:00")); return dtLocal.toLocaleString('de-DE', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit', timeZoneName: 'short' }) + ' (UTC→local)'; })() : '-'}</td>
-                              <td style={{ padding: '4px 8px', color: '#4ade80' }}>{d.arrival_time ? (() => { const ts = d.arrival_time; const dtLocal = new Date(ts.endsWith("Z") ? ts : ts + (ts.includes("+") || ts.includes("Z") ? "" : "+00:00")); return dtLocal.toLocaleString('de-DE', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit', timeZoneName: 'short' }) + ' (UTC→local)'; })() : '-'}</td>
+                              <td style={{ padding: '4px 8px', color: '#38bdf8' }}>{d.departure_time ? (() => { const ts = d.departure_time; if (!ts) return '-'; const m = ts.match(/(\d{1,2}):(\d{2})/); if (m) return m[1] + ':' + m[2]; return ts.includes(':') ? ts.split(':').slice(0,2).join(':') : '-'; })() : '-'}</td>
+                              <td style={{ padding: '4px 8px', color: '#4ade80' }}>{d.arrival_time ? (() => { const ts = d.arrival_time; if (!ts) return '-'; const m = ts.match(/(\d{1,2}):(\d{2})/); if (m) return m[1] + ':' + m[2]; return ts.includes(':') ? ts.split(':').slice(0,2).join(':') : '-'; })() : '-'}</td>
                               <td style={{ padding: '4px 8px', color: '#818cf8' }}>{d.duration_minutes ? d.duration_minutes + ' min' : '-'}</td>
                             </tr>)}
                           </tbody>
@@ -319,6 +358,10 @@ export default function App() {
                   <label style={{ fontSize: 12, fontWeight: 600, color: '#f8fafc', display: 'block', marginBottom: 6 }}>Earliest Return Departure</label>
                   <input type="time" value={minRetDep} onChange={e => setMinRetDep(e.target.value)} style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.15)', background: 'rgba(255,255,255,0.06)', color: '#f8fafc', fontSize: 14 }} />
                 </div>
+                <div style={{ background: 'rgba(255,255,255,0.03)', borderRadius: 14, padding: 16, border: '1px solid rgba(255,255,255,0.06)' }}>
+                  <label style={{ fontSize: 12, fontWeight: 600, color: '#f8fafc', display: 'block', marginBottom: 6 }}>Max Trip Length (days)</label>
+                  <input type="number" min={1} max={30} value={maxTripDays} onChange={e => setMaxTripDays(parseInt(e.target.value) || 1)} style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.15)', background: 'rgba(255,255,255,0.06)', color: '#f8fafc', fontSize: 14 }} />
+                </div>
               </div>
               <div style={{ marginBottom: 14, display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
                 <button onClick={async () => {
@@ -326,7 +369,7 @@ export default function App() {
                     const res = await fetch('/api/turnarounds?' + new URLSearchParams({
                       start: tripStart, end: tripEnd,
                       start_days: startWeekdays.join(','), end_days: endWeekdays.join(','),
-                      max_dep_dest: maxDepToDest, min_ret_dep: minRetDep
+                      max_dep_dest: maxDepToDest, min_ret_dep: minRetDep, max_trip_days: maxTripDays
                     }));
                     const data = await res.json();
                     setTurnarounds(data.turnarounds || data.results || []);
@@ -373,12 +416,10 @@ export default function App() {
               borderRadius: 18, padding: 24, boxShadow: '0 10px 30px rgba(0,0,0,0.2)'
             }}>
               <h3 style={{ margin: '0 0 14px', fontSize: 18, fontWeight: 700, color: '#f8fafc' }}>API Settings</h3>
-              <p style={{ color: '#94a3b8', fontSize: 14, marginBottom: 16 }}>Store your RapidAPI key for aviation data access.</p>
+                              <p style={{ color: '#94a3b8', fontSize: 14, marginBottom: 16 }}>Configure max fetch months for flight data.</p>
               <form onSubmit={async (e) => {
                 e.preventDefault();
-                let raw = document.getElementById('apiKeyInput')?.value || ''; let key = (raw === '••••••••') ? null : raw;
-                const body = { fetch_interval_minutes: document.getElementById('fetchInterval')?.value || 30, fetch_max_days: document.getElementById('fetchMaxDays')?.value || 7 };
-                if (key !== null) body.api_key = key;
+                const body = { fetch_max_months: document.getElementById('fetchMaxMonths')?.value || 7 };
                 const res = await fetch('/api/settings', {
                   method: 'POST',
                   headers: {'Content-Type':'application/json'},
@@ -391,29 +432,10 @@ export default function App() {
                 }
               }} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                  <label htmlFor="apiKeyInput" style={{ fontSize: 13, fontWeight: 600, color: '#f8fafc' }}>API Key (RapidAPI)</label>
-                  <input id="apiKeyInput" type="password" placeholder="RapidAPI Key" value={apiKeyValue}
-                    onChange={e => { setApiKeyValue(e.target.value); setHasApiKey(e.target.value.trim().length > 0); }}
-                    style={{
-                      padding: '10px 14px', borderRadius: 10, border: '1px solid rgba(255,255,255,0.15)',
-                      background: 'rgba(255,255,255,0.06)', color: '#f8fafc', fontSize: 15, outline: 'none', width: '100%', maxWidth: 420
-                    }}/>
+                  <label htmlFor="fetchMaxMonths" style={{ fontSize: 13, fontWeight: 600, color: '#f8fafc' }}>Max Fetch Months (1-12)</label>
+                  <input id="fetchMaxMonths" type="number" min="1" max="12" defaultValue="1" placeholder="Months" style={{ padding: "10px 14px", borderRadius: 10, border: "1px solid rgba(255,255,255,0.15)", background: "rgba(255,255,255,0.06)", color: "#f8fafc", fontSize: 15, width: '100%', maxWidth: 420, outline: "none" }} />
                   <span style={{ fontSize: 12, color: '#94a3b8', lineHeight: 1.5, maxWidth: 360 }}>
-                    API key for rapidapi.com → AeroDataBox API.
-                  </span>
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                  <label htmlFor="fetchInterval" style={{ fontSize: 13, fontWeight: 600, color: '#f8fafc' }}>Fetch Interval (minutes)</label>
-                  <input id="fetchInterval" type="number" min="0" max="10080" defaultValue="30" placeholder="Minutes" style={{ padding: "10px 14px", borderRadius: 10, border: "1px solid rgba(255,255,255,0.15)", background: "rgba(255,255,255,0.06)", color: "#f8fafc", fontSize: 15, width: '100%', maxWidth: 420, outline: "none" }} />
-                  <span style={{ fontSize: 12, color: '#94a3b8', lineHeight: 1.5, maxWidth: 360 }}>
-                    How often flight data is fetched (minutes). 0 disables scheduling (up to 1 week = 10080 min).
-                  </span>
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                  <label htmlFor="fetchMaxDays" style={{ fontSize: 13, fontWeight: 600, color: '#f8fafc' }}>Max Fetch Days (1-365)</label>
-                  <input id="fetchMaxDays" type="number" min="1" max="365" defaultValue="7" placeholder="Max fetch days" style={{ padding: "10px 14px", borderRadius: 10, border: "1px solid rgba(255,255,255,0.15)", background: "rgba(255,255,255,0.06)", color: "#f8fafc", fontSize: 15, width: '100%', maxWidth: 420, outline: "none" }} />
-                  <span style={{ fontSize: 12, color: '#94a3b8', lineHeight: 1.5, maxWidth: 360 }}>
-                    The parameter <code>fetch_max_days</code> controls how many days ahead flight data is fetched. It is globally shared between all airports.
+                    The parameter <code>fetch_max_months</code> controls how many months ahead flight data is fetched. It is globally shared between all airports.
                   </span>
                 </div>
                 <button type="submit" style={{
