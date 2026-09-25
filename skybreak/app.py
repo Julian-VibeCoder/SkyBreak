@@ -2,7 +2,7 @@ import logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 from flask import Flask, request, jsonify, send_from_directory
 from skybreak.airport_lookup import fetch_airport_name
-from skybreak.airport import add_airport, delete_airport, validate_iata, init_db
+from skybreak.airport import add_airport, delete_airport, validate_iata
 import sqlite3
 import threading
 from datetime import datetime, timezone
@@ -17,7 +17,8 @@ app = Flask(__name__, static_folder=os.path.join(FRONTEND_BUILD_DIR, "static"), 
 _scrape_lock = threading.Lock()
 _scrape_in_progress = False
 
-init_db()
+from skybreak.db_migrate import apply_migrations
+apply_migrations()
 
 @app.route("/api/airports", methods=["GET"])
 def list_airports():
@@ -326,5 +327,5 @@ def turnarounds():
     return jsonify({"turnarounds": unique, "count": len(unique)})
 
 if __name__ == "__main__":
-    init_db()
+    apply_migrations()
     app.run(host="0.0.0.0", port=80)
