@@ -3,15 +3,15 @@ import CollapsibleSidebar from './components/CollapsibleSidebar';
 import Layout from './components/Layout';
 
 const NAV = [
+  { key: 'trips', label: 'Trips', icon: '🧳' },
+  { key: 'prices', label: 'Prices', icon: '💰' },
   { key: 'airports', label: 'Airports', icon: '✈️' },
   { key: 'flights', label: 'Flights', icon: '🛫' },
-  { key: 'trips', label: 'Trips', icon: '🧳' },
-  { key: 'costs', label: 'Costs', icon: '💰' },
   { key: 'settings', label: 'Settings', icon: '⚙️' },
 ];
 
 export default function App() {
-  const [tab, setTab] = useState('airports');
+  const [tab, setTab] = useState('trips');
   const [code, setCode] = useState('');
   const [list, setList] = useState([]);
   const [feedback, setFeedback] = useState('');
@@ -112,6 +112,19 @@ export default function App() {
     } else { setFeedback('Serverfehler'); }
   };
 
+  useEffect(() => {
+    const handlePop = () => {
+      const pathTab = window.location.pathname.replace('/', '').replace('/', '');
+      const valid = NAV.find(n => n.key === pathTab);
+      if (valid) setTab(valid.key);
+    };
+    window.addEventListener('popstate', handlePop);
+    const initial = window.location.pathname.replace('/', '').replace('/', '');
+    const valid = NAV.find(n => n.key === initial);
+    if (valid && initial !== '') setTab(valid.key);
+    return () => window.removeEventListener('popstate', handlePop);
+  }, []);
+
   const removeAirport = async (c) => {
     const res = await fetch('/api/airports/' + c, { method: 'DELETE' });
     if (res.ok) {
@@ -147,16 +160,18 @@ export default function App() {
 
         <nav style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           {NAV.map(n => (
-            <button key={n.key} onClick={() => setTab(n.key)} style={{
-              textAlign: 'left', padding: '12px 14px', borderRadius: 12, border: 'none',
-              background: tab === n.key ? 'rgba(56,189,248,0.15)' : 'transparent',
-              color: tab === n.key ? '#38bdf8' : '#cbd5e1', fontWeight: 600, fontSize: 15,
-              cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 12,
-              transition: 'all 0.2s ease', boxShadow: tab === n.key ? 'inset 0 0 0 1px rgba(56,189,248,0.35)' : 'none'
-            }}>
-              <span style={{ fontSize: 18 }}>{n.icon}</span>
-              {n.label}
-            </button>
+            <a key={n.key} href={'/' + n.key} onClick={(e) => { if (e.ctrlKey || e.metaKey || e.button === 1) return; e.preventDefault(); setTab(n.key); window.history.pushState({}, '', '/' + n.key); }} style={{ textDecoration: 'none', color: 'inherit', display: 'block', width: '100%' }}>
+              <button style={{
+                width: '100%', textAlign: 'left', padding: '12px 14px', borderRadius: 12, border: 'none',
+                background: tab === n.key ? 'rgba(56,189,248,0.15)' : 'transparent',
+                color: tab === n.key ? '#38bdf8' : '#cbd5e1', fontWeight: 600, fontSize: 15,
+                cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 12,
+                transition: 'all 0.2s ease', boxShadow: tab === n.key ? 'inset 0 0 0 1px rgba(56,189,248,0.35)' : 'none'
+              }}>
+                <span style={{ fontSize: 18 }}>{n.icon}</span>
+                {n.label}
+              </button>
+            </a>
           ))}
         </nav>
 
@@ -178,7 +193,7 @@ export default function App() {
               {tab === 'airports' && 'Manage airport codes and view departures / arrivals.'}
               {tab === 'flights' && 'Browse flight schedules by airport and date.'}
               {tab === 'trips' && 'Plan trips and view itineraries.'}
-              {tab === 'costs' && 'Track travel expenses and budget overview.'}
+              {tab === 'prices' && 'Track travel expenses and budget overview.'}
               {tab === 'settings' && 'Configure API key for flight data access.'}
             </p>
           </div>
@@ -416,7 +431,7 @@ export default function App() {
             </section>
           )}
 
-          {tab === 'costs' && (
+          {tab === 'prices' && (
             <section style={{
               background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)',
               borderRadius: 18, padding: 24, boxShadow: '0 10px 30px rgba(0,0,0,0.2)'
