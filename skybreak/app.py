@@ -333,14 +333,15 @@ def find_short_trips():
     conn = sqlite3.connect(DB_PATH, timeout=30.0)
     fav_rows = conn.execute("SELECT trip_date, start_time, destination_airport, outbound_flight_number, return_flight_number FROM favorite_trips").fetchall()
     conn.close()
-    fav_set = set((r[0], r[1], r[2], r[3], r[4]) for r in fav_rows)
+    fav_set = set()
+    for r in fav_rows:
+        fav_set.add((r[0], r[2], r[3], r[4]))  # (trip_date, destination_airport, outbound_flight, return_flight)
     for item in ergebnisse:
-        key = (str(item.get("hinflug_abflug_zeit", "")).split("T")[0] if item.get("hinflug_abflug_zeit") else None,
-               item.get("hinflug_abflug_zeit", ""),
-               item.get("destination", ""),
-               item.get("hinflug_flight_number", ""),
-               item.get("rueckflug_flight_number", ""))
-        item["is_favorite"] = key in fav_set
+        trip_date = str(item.get("hinflug_abflug_zeit", "")).split()[0] if item.get("hinflug_abflug_zeit") else ""
+        dest = item.get("hinflug_ziel") or item.get("destination") or ""
+        out_f = item.get("hinflug_flight_number") or ""
+        ret_f = item.get("rueckflug_flight_number") or ""
+        item["is_favorite"] = (trip_date, dest, out_f, ret_f) in fav_set
     return jsonify({"turnarounds": ergebnisse, "count": len(ergebnisse), "algorithm": "sql_filter_hash_join"})
 
 if __name__ == "__main__":
