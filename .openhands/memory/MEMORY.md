@@ -17,3 +17,14 @@
 - fetch_max_months = 1 muss als DB-Setting (init_db/settings) + Env-Var gesetzt sein.
 - API 404 (scrape-status): Route in app.py ergänzen, nicht Container editieren.
 - Insert-Konflikte: INSERT statt INSERT OR IGNORE, wenn DB leer / keine Konflikte erwartet.
+
+# GitHub Auth Token
+GITHUB_PERSONAL_ACCESS_TOKEN set for GitHub API access (gh / curl).
+Use GH_TOKEN=\$GITHUB_TOKEN for gh CLI operations.
+Token masked in output; never commit raw value.
+
+# Container Config (2026-09-25)
+- Port: 8088 (mapped to container 80)
+- Mount: /opt/skybreak (DB_FILE=/opt/skybreak/skybreak.db)
+- Container name: flightbreak
+- Image: skybreak-local

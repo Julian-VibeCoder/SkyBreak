@@ -2,7 +2,7 @@ import logging, sqlite3, re
 import os
 from skybreak.airport_lookup import fetch_airport_name
 from datetime import datetime, timezone
-DB_PATH = os.environ.get("DB_FILE", "/data/skybreak.db")
+DB_PATH = os.environ.get("DB_FILE", "/opt/skybreak/skybreak.db")
 logger = logging.getLogger(__name__)
 import os
 

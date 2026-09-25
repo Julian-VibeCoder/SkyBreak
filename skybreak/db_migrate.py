@@ -1,7 +1,7 @@
 """Streamlined DB migration: version saved in db, steps per schema change, applied at startup."""
 import sqlite3, os, logging
 logger = logging.getLogger(__name__)
-DB_FILE = os.environ.get("DB_FILE", "/data/skybreak.db")
+DB_FILE = os.environ.get("DB_FILE", "/opt/skybreak/skybreak.db")
 
 def get_current_version(conn):
     try:
@@ -42,6 +42,7 @@ def migration_v1(conn):
                 pass
             conn.execute("DROP TABLE flights_old")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_flights_airport ON flights (airport_icao, departure_time)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_fluege_matching ON flights(airport_icao, to_icao, departure_time)")
     conn.execute("CREATE TABLE IF NOT EXISTS db_version (version INTEGER PRIMARY KEY)")
     conn.execute("DELETE FROM db_version")
     conn.execute("INSERT INTO db_version (version) VALUES (1)")

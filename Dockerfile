@@ -24,7 +24,7 @@ COPY --from=builder /app/frontend/build ./frontend/build
 
 EXPOSE 80
 ENV PYTHONUNBUFFERED=1
-ENV FLASK_APP=skybreak/app DB_FILE=/data/skybreak.db FRONTEND_BUILD_DIR=/app/frontend/build
-RUN mkdir -p /data
+ENV FLASK_APP=skybreak/app DB_FILE=/opt/skybreak/skybreak.db FRONTEND_BUILD_DIR=/app/frontend/build
+RUN mkdir -p /opt/skybreak
 # DB init handled by container at startup (not build)
 CMD ["python", "-m", "skybreak.app"]
