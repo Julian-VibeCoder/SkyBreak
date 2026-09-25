@@ -327,7 +327,5 @@ def turnarounds():
     return jsonify({"turnarounds": unique, "count": len(unique)})
 
 if __name__ == "__main__":
-    from skybreak.db_migrate import apply_migrations
-apply_migrations()
     apply_migrations()
     app.run(host="0.0.0.0", port=80)
