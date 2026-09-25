@@ -9,6 +9,30 @@ const NAV = [
   { key: 'flights', label: 'Flights', icon: '🛫' },
   { key: 'settings', label: 'Settings', icon: '⚙️' },
 ];
+function FavoriteTrips() {
+  const [favs, setFavs] = useState([]);
+  useEffect(() => {
+    fetch('/api/favorites').then(r => r.json()).then(d => setFavs(Array.isArray(d) ? d : [])).catch(() => setFavs([]));
+  }, []);
+  const remove = async (id) => {
+    await fetch('/api/favorites/' + id, { method: 'DELETE' });
+    setFavs(f => f.filter(x => x.id !== id));
+  };
+  if (!favs.length) return <p style={{ color: '#94a3b8', fontSize: 13 }}>No favorites yet.</p>;
+  return (
+    <div>
+      {favs.map(f => (
+        <div key={f.id} style={{ padding: '8px 0', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+          <div style={{ color: '#f8fafc', fontWeight: 600, fontSize: 13 }}>{f.destination_airport || 'Destination'}</div>
+          <div style={{ color: '#94a3b8', fontSize: 12 }}>{f.trip_date} @ {f.start_time || ''}</div>
+          <div style={{ color: '#cbd5e1', fontSize: 12 }}>{f.outbound_flight_number || ''} → {f.return_flight_number || ''}</div>
+          <button onClick={() => remove(f.id)} style={{ marginTop: 4, padding: '4px 8px', borderRadius: 6, border: 'none', background: '#ef4444', color: '#fff', fontSize: 11, cursor: 'pointer' }}>Delete</button>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 
 export default function App() {
   const [tab, setTab] = useState('trips');
@@ -416,6 +440,7 @@ export default function App() {
                                         {(t.rueckflug_abflug_zeit ? (t.rueckflug_abflug_zeit.substring ? t.rueckflug_abflug_zeit.substring(0,10) + ', ' + t.rueckflug_abflug_zeit.substring(11,16) : t.rueckflug_abflug_zeit.substring(0,10) + ', ' + t.rueckflug_abflug_zeit.substring(11,16)) : '-') + ' | ' + (t.rueckflug_flight_number || '-')}
                                       </td>
                                       <td style={{ padding: '6px 8px', color: '#38bdf8' }}>{(t.dauer_tage !== undefined ? t.dauer_tage + 'd' : (t.days ? t.days + 'd' : '-'))}</td>
+                                      <td style={{ padding: '6px 8px' }}><span style={{ color: t.is_favorite ? '#38bdf8' : '#94a3b8', fontWeight: 700, fontSize: 13 }}>{t.is_favorite ? '★ Favorited' : '☆ Not saved'}</span></td>
                                     </tr>
                                   ))}
                                 </tbody>
@@ -437,6 +462,10 @@ export default function App() {
               borderRadius: 18, padding: 24, boxShadow: '0 10px 30px rgba(0,0,0,0.2)'
             }}>
               <h3 style={{ margin: '0 0 14px', fontSize: 18, fontWeight: 700, color: '#f8fafc' }}>Cost Overview</h3>
+              <div style={{ marginTop: 10, padding: 12, background: 'rgba(255,255,255,0.06)', borderRadius: 10, border: '1px solid rgba(255,255,255,0.1)' }}>
+                <h4 style={{ color: '#f8fafc', fontSize: 14, marginBottom: 8 }}>Favorite Trips</h4>
+                <FavoriteTrips />
+              </div>
             </section>
           )}
 

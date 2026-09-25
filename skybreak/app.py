@@ -179,6 +179,34 @@ def settings():
         conn.close()
         return jsonify({r[0]: r[1] for r in rows})
 
+@app.route("/api/favorites", methods=["GET"])
+def list_favorites():
+    conn = sqlite3.connect(DB_PATH, timeout=30.0)
+    rows = conn.execute("SELECT id, trip_date, start_time, destination_airport, outbound_flight_number, return_flight_number, created_at FROM favorite_trips ORDER BY created_at DESC").fetchall()
+    conn.close()
+    return jsonify([{"id": r[0], "trip_date": r[1], "start_time": r[2], "destination_airport": r[3], "outbound_flight_number": r[4], "return_flight_number": r[5], "created_at": r[6]} for r in rows])
+
+@app.route("/api/favorites", methods=["POST"])
+def create_favorite():
+    data = request.get_json(force=True)
+    conn = sqlite3.connect(DB_PATH, timeout=30.0)
+    conn.execute("INSERT INTO favorite_trips (trip_date, start_time, destination_airport, outbound_flight_number, return_flight_number) VALUES (?, ?, ?, ?, ?)",
+                 (data.get("trip_date"), data.get("start_time"), data.get("destination_airport"), data.get("outbound_flight_number"), data.get("return_flight_number")))
+    conn.commit()
+    new_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+    conn.close()
+    return jsonify({"saved": True, "id": new_id})
+
+@app.route("/api/favorites/<int:fav_id>", methods=["DELETE"])
+def delete_favorite(fav_id):
+    conn = sqlite3.connect(DB_PATH, timeout=30.0)
+    conn.execute("DELETE FROM favorite_trips WHERE id = ?", (fav_id,))
+    conn.commit()
+    conn.close()
+    return jsonify({"deleted": fav_id})
+
+@app.route("/api/turnarounds", methods=["GET"])
+
 @app.route("/api/turnarounds", methods=["GET"])
 def find_short_trips():
     # Neuer Algorithmus: SQL-Filter + Two-Pointer/Hash-Join (Pseudocode-Implementierung)
@@ -301,6 +329,18 @@ def find_short_trips():
                 "dauer_tage": round(dauer_stunden / 24.0, 2)
             })
     ergebnisse.sort(key=lambda x: x.get("hinflug_abflug_zeit", ""))
+    # Favoriten-Status ergänzen
+    conn = sqlite3.connect(DB_PATH, timeout=30.0)
+    fav_rows = conn.execute("SELECT trip_date, start_time, destination_airport, outbound_flight_number, return_flight_number FROM favorite_trips").fetchall()
+    conn.close()
+    fav_set = set((r[0], r[1], r[2], r[3], r[4]) for r in fav_rows)
+    for item in ergebnisse:
+        key = (str(item.get("hinflug_abflug_zeit", "")).split("T")[0] if item.get("hinflug_abflug_zeit") else None,
+               item.get("hinflug_abflug_zeit", ""),
+               item.get("destination", ""),
+               item.get("hinflug_flight_number", ""),
+               item.get("rueckflug_flight_number", ""))
+        item["is_favorite"] = key in fav_set
     return jsonify({"turnarounds": ergebnisse, "count": len(ergebnisse), "algorithm": "sql_filter_hash_join"})
 
 if __name__ == "__main__":

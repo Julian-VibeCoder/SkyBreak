@@ -49,12 +49,22 @@ def migration_v1(conn):
     logger.info("Applied migration v1")
 
 
+def migration_v2(conn):
+    conn.execute("CREATE TABLE IF NOT EXISTS favorite_trips (id INTEGER PRIMARY KEY AUTOINCREMENT, trip_date TEXT, start_time TEXT, destination_airport TEXT, outbound_flight_number TEXT, return_flight_number TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_favorite_trips_date ON favorite_trips (trip_date)")
+    conn.execute("DELETE FROM db_version")
+    conn.execute("INSERT INTO db_version (version) VALUES (2)")
+    logger.info("Applied migration v2")
+
 def apply_migrations():
     conn = sqlite3.connect(DB_FILE, timeout=30.0)
     current = get_current_version(conn)
     if current < 1:
         migration_v1(conn)
-    conn.execute("DELETE FROM settings WHERE key NOT IN (?, ?, ?)", ("scrape_delay_ms", "fetch_max_months", "fetch_max_days"))
+    current = get_current_version(conn)
+    if current < 2:
+        migration_v2(conn)
+    conn.execute("DELETE FROM settings WHERE key NOT IN (?, ?, ?, ?)", ("scrape_delay_ms", "fetch_max_months", "fetch_max_days", "favorite_max_items"))
     conn.commit()
     conn.close()
     logger.info("DB at version %d", get_current_version(sqlite3.connect(DB_FILE, timeout=30.0)))
