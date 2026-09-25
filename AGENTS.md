@@ -40,3 +40,11 @@ VERIFICATION: pytest partial (18/21); Docker build ok (skybreak-local); containe
 CLEANUP: Remove test containers/volumes; keep production image; never commit DB/test artifacts
 DB MIGRATION: Empty/missing /data/skybreak.db => create; existing => migrate (add airport_name, etc.)
 - All 23 tests passing (fixed DB_PATH in tests, init_db schema, fixture dates, assertions)
+
+
+## DB Migration Rules (2026-09-25)
+1. Schema version saved in DB table `db_version`.
+2. Every DB change needs own migration step increasing version; apply at startup via `skybreak/db_migrate.py`.
+3. Remove unused DB/init scripts; runtime must use only `db_migrate.apply_migrations()`.
+4. Future migrations: add `migration_v*` in `db_migrate.py`, update version, deploy via image rebuild.
+5. Never live-patch DB/container; changes only through source + docker build + redeploy.

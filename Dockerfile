@@ -6,7 +6,7 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 COPY skybreak/ ./skybreak/
-COPY init_db.py ./init_db.py
+COPY skybreak/db_migrate.py ./skybreak/db_migrate.py
 COPY frontend/ ./frontend/
 RUN cd frontend && npm install --prefer-offline --no-audit --no-fund && npm run build
 
@@ -18,7 +18,7 @@ WORKDIR /app
 COPY --from=builder /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
 COPY --from=builder /app/requirements.txt .
 COPY --from=builder /app/skybreak/ ./skybreak/
-COPY --from=builder /app/init_db.py ./init_db.py
+COPY --from=builder /app/skybreak/db_migrate.py ./skybreak/db_migrate.py
 
 COPY --from=builder /app/frontend/build ./frontend/build
 
