@@ -44,7 +44,8 @@ def remove_airport(code):
     return jsonify({"deleted": code})
 
 @app.route("/")
-def index():
+@app.route("/<path:path>")
+def index(path=""):
     return send_from_directory(FRONTEND_BUILD_DIR, "index.html")
 
 @app.route("/api/flights", methods=["GET"])
