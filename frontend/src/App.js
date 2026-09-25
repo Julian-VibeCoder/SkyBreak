@@ -395,10 +395,10 @@ export default function App() {
                                   {group.map((t, i) => (
                                     <tr key={i} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
                                       <td style={{ padding: '6px 8px', color: '#f8fafc', fontWeight: 600 }}>
-                                        {(t.hinflug_ziel_name || (t.hinflug_ziel || t.destination || '-') ? ((t.hinflug_ziel_name || (t.hinflug_ziel || t.destination || '-')) + ' (' + (t.hinflug_ziel || '-') + ')') : (t.hinflug_ziel || t.destination || '-') ) + ' → ' + (t.rueckflug_start_name || (t.rueckflug_start || t.start_airport || '-') ? ((t.rueckflug_start_name || (t.rueckflug_start || t.start_airport || '-')) + ' (' + (t.rueckflug_start || t.start_airport || '-') + ')') : (t.rueckflug_start || t.start_airport || '-') ) + ' (Hinflug ' + (t.hinflug_id || '-') + ') dep ' + (t.hinflug_abflug_zeit ? (t.hinflug_abflug_zeit.substring ? t.hinflug_abflug_zeit.substring(11,16) : t.hinflug_abflug_zeit) : '-')}
+                                        {(t.hinflug_abflug_zeit ? (t.hinflug_abflug_zeit.substring ? t.hinflug_abflug_zeit.substring(0,10) + ', ' + t.hinflug_abflug_zeit.substring(11,16) : t.hinflug_abflug_zeit.substring(0,10) + ', ' + t.hinflug_abflug_zeit.substring(11,16)) : '-') + ' | ' + (t.hinflug_flight_number || '-')}
                                       </td>
                                       <td style={{ padding: '6px 8px', color: '#f8fafc', fontWeight: 600 }}>
-                                        {(t.hinflug_ziel_name || (t.hinflug_ziel || t.destination || '-') ? ((t.hinflug_ziel_name || (t.hinflug_ziel || t.destination || '-')) + ' (' + (t.hinflug_ziel || '-') + ')') : (t.hinflug_ziel || t.destination || '-') ) + ' → ' + (t.rueckflug_start_name || (t.rueckflug_start || t.start_airport || '-') ? ((t.rueckflug_start_name || (t.rueckflug_start || t.start_airport || '-')) + ' (' + (t.rueckflug_start || t.start_airport || '-') + ')') : (t.rueckflug_start || t.start_airport || '-') ) + ' (Rückflug ' + (t.rueckflug_id || '-') + ') dep ' + (t.rueckflug_abflug_zeit ? (t.rueckflug_abflug_zeit.substring ? t.rueckflug_abflug_zeit.substring(11,16) : t.rueckflug_abflug_zeit) : '-')}
+                                        {(t.rueckflug_abflug_zeit ? (t.rueckflug_abflug_zeit.substring ? t.rueckflug_abflug_zeit.substring(0,10) + ', ' + t.rueckflug_abflug_zeit.substring(11,16) : t.rueckflug_abflug_zeit.substring(0,10) + ', ' + t.rueckflug_abflug_zeit.substring(11,16)) : '-') + ' | ' + (t.rueckflug_flight_number || '-')}
                                       </td>
                                       <td style={{ padding: '6px 8px', color: '#38bdf8' }}>{(t.dauer_tage !== undefined ? t.dauer_tage + 'd' : (t.days ? t.days + 'd' : '-'))}</td>
                                     </tr>
@@ -482,3 +482,4 @@ export default function App() {
     </div>
   );
 }
+

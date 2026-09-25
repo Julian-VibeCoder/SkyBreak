@@ -7,6 +7,7 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 COPY skybreak/ ./skybreak/
 COPY skybreak/db_migrate.py ./skybreak/db_migrate.py
+COPY frontend/src/App.js ./frontend/src/App.js
 COPY frontend/ ./frontend/
 RUN cd frontend && npm install --prefer-offline --no-audit --no-fund && npm run build
 

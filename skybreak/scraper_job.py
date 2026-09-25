@@ -125,6 +125,36 @@ def start_scheduler():
     scheduler.add_job(scrape_all_airports, "interval", minutes=interval)
     scheduler.start()
 
+def save_flights(airport, flights, month=None):
+    # Handle nested API-style flight objects (departure/arrival with scheduledTime/airport)
+    parsed = []
+    for f in flights if isinstance(flights, list) else [flights]:
+        if isinstance(f, dict) and ("departure" in f or "arrival" in f):
+            dep = f.get("departure") or {}
+            arr = f.get("arrival") or {}
+            dep_airport = dep.get("airport") or {}
+            arr_airport = arr.get("airport") or {}
+            dep_time_raw = dep.get("scheduledTime")
+            arr_time_raw = arr.get("scheduledTime")
+            if isinstance(dep_time_raw, dict):
+                dep_time_raw = dep_time_raw.get("utc", "")
+            if isinstance(arr_time_raw, dict):
+                arr_time_raw = arr_time_raw.get("utc", "")
+            dep_time = str(dep_time_raw) if dep_time_raw else ""
+            arr_time = str(arr_time_raw) if arr_time_raw else ""
+            parsed.append({
+                "from": dep_airport.get("icao") or airport.upper(),
+                "to": arr_airport.get("icao") or "",
+                "date": dep_time[:10] if dep_time else (arr_time[:10] if arr_time else ""),
+                "departure": dep_time[11:16] if len(dep_time) >= 16 else (dep_time if dep_time else ""),
+                "arrival": arr_time[11:16] if len(arr_time) >= 16 else (arr_time if arr_time else ""),
+                "flight_number": f.get("number") or f.get("flightNumber") or "",
+                "duration_minutes": None,
+            })
+        else:
+            parsed.append(f)
+    return _save_kayak(airport, parsed, month or "")
+
 def clean_old_flights():
     conn = sqlite3.connect(DB_PATH, timeout=5)
     conn.execute("DELETE FROM flights WHERE flight_date < date('now') OR (flight_date IS NULL AND departure < datetime('now'))")

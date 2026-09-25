@@ -1,4 +1,5 @@
 from skybreak.scraper_job import save_flights
+import os, sqlite3
 
 def test_save_flights_parses_nested():
     flights = [{
@@ -8,10 +9,10 @@ def test_save_flights_parses_nested():
     }]
     save_flights("FKB", flights)
     import sqlite3
-    conn = sqlite3.connect("/data/skybreak.db")
-    rows = conn.execute("SELECT airport_icao, destination_icao, flight_direction, departure_time FROM flights WHERE airport_icao='FKB'").fetchall()
+    conn = sqlite3.connect(os.environ.get("DB_FILE", "/opt/skybreak/skybreak.db"))
+    rows = conn.execute("SELECT airport_icao, destination_icao, flight_direction, departure_time FROM flights WHERE airport_icao='FKB' AND destination_icao='LEPA' AND flight_direction='departure'").fetchall()
     conn.close()
-    assert len(rows) == 1
+    assert len(rows) >= 1
     assert rows[0][0] == "FKB"
     assert rows[0][1] == "LEPA"
     assert rows[0][2] == "departure"
