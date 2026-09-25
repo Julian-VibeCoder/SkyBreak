@@ -3,6 +3,6 @@ services:
   flightbreak:
     image: skybreak-local
     build: .
-    volumes: ["/opt/skybreak/:/data/"]
+    volumes: ["/opt/skybreak/:/opt/skybreak/"]
     ports: ["8088:80"]
     command: python -u -m flask --app skybreak/app run --host=0.0.0.0 --port=80

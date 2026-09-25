@@ -3,3 +3,4 @@ frontend/src/.gitkeep
 *.db
 .git
 .tmp
+frontend/build

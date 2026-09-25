@@ -116,3 +116,7 @@ All migrations should increment the version number (e.g., V2, V3) when new schem
 - Unused init scripts removed (init_db.py deleted); runtime uses db_migrate.apply_migrations().
 - Schema v1: airports, settings, flights (used cols only), db_version.
 - Never edit DB/container live — only code + build + redeploy.
+
+# GitHub Auth Token
+GITHUB_PERSONAL_ACCESS_TOKEN available for PR creation/merge via API.
+Reference as GH_TOKEN=\$GITHUB_TOKEN when using gh CLI.
