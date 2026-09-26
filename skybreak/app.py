@@ -16,6 +16,8 @@ app = Flask(__name__, static_folder=os.path.join(FRONTEND_BUILD_DIR, "static"), 
 
 _scrape_lock = threading.Lock()
 _scrape_in_progress = False
+_price_lock = threading.Lock()
+_price_in_progress = False
 
 from skybreak.db_migrate import apply_migrations
 apply_migrations()
@@ -194,16 +196,6 @@ def create_favorite():
 
 @app.route("/api/favorites", methods=["GET"])
 def list_favorites():
-    # fast-flights bei jedem Aufruf der prices-Ansicht abfragen
-    from skybreak.flight_prices import fetch_prices_favorite
-    conn = sqlite3.connect(DB_PATH, timeout=30.0)
-    rows = conn.execute("SELECT id FROM favorite_trips").fetchall()
-    conn.close()
-    for (fav_id,) in rows:
-        try:
-            fetch_prices_favorite(fav_id)
-        except Exception:
-            pass
     conn = sqlite3.connect(DB_PATH, timeout=30.0)
     rows = conn.execute("SELECT id, trip_date, start_time, destination_airport, outbound_flight_number, return_flight_number, start_airport, created_at FROM favorite_trips ORDER BY created_at DESC").fetchall()
     conn.close()
@@ -232,9 +224,45 @@ def favorite_prices(fav_id):
     result = fetch_prices_favorite(fav_id)
     return jsonify({"updated": True, "result": result})
 
+@app.route("/api/prices", methods=["POST"])
+def update_prices():
+    global _price_in_progress
+    with _price_lock:
+        if _price_in_progress:
+            return jsonify({"updated": False, "message": "Preisaktualisierung bereits aktiv", "running": True}), 409
+        _price_in_progress = True
+    from skybreak.flight_prices import fetch_prices_favorite
+    import threading
+    def _run_prices():
+        global _price_in_progress
+        try:
+            conn = sqlite3.connect(DB_PATH, timeout=30.0)
+            rows = conn.execute("SELECT id FROM favorite_trips").fetchall()
+            conn.close()
+            for (fav_id,) in rows:
+                try:
+                    fetch_prices_favorite(fav_id)
+                except Exception:
+                    pass
+        finally:
+            with _price_lock:
+                _price_in_progress = False
+    threading.Thread(target=_run_prices, daemon=True).start()
+    return jsonify({"updated": True, "running": True})
+
+@app.route("/api/prices/status", methods=["GET"])
+def price_status():
+    global _price_in_progress
+    with _price_lock:
+        running = _price_in_progress
+    return jsonify({"running": running})
+
+@app.route("/api/turnarounds", methods=["GET"])
+
 @app.route("/api/turnarounds", methods=["GET"])
 
 
+@app.route("/api/prices", methods=["POST"])
 @app.route("/api/turnarounds", methods=["GET"])
 def find_short_trips():
     # Neuer Algorithmus: SQL-Filter + Two-Pointer/Hash-Join (Pseudocode-Implementierung)

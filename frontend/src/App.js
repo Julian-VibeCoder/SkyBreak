@@ -12,17 +12,27 @@ const NAV = [
 function FavoriteTripPrices() {
   const [prices, setPrices] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [updating, setUpdating] = useState(false);
+  const [progress, setProgress] = useState(false);
   const load = () => { setLoading(true); fetch('/api/favorites').then(r => r.json()).then(d => { setPrices(Array.isArray(d) ? d : []); }).catch(() => setPrices([])).finally(() => setLoading(false)); };
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); const iv = setInterval(() => { fetch('/api/prices/status').then(r=>r.json()).then(s=>{if(s.running){setProgress(true);}else{setProgress(false);}}).catch(()=>{}); }, 1500); return () => clearInterval(iv); }, []);
   if (!prices.length) return <p style={{ color: '#94a3b8', fontSize: 13 }}>No favorites yet.</p>;
+  const handleUpdate = () => {
+    if (updating || progress) return;
+    setUpdating(true); setProgress(true);
+    fetch('/api/prices', {method:'POST'}).then(r => r.json()).then(d => { if(d.updated) { setTimeout(load, 800); } else { setProgress(false); } }).catch(() => setProgress(false)).finally(() => setUpdating(false));
+  };
   return (
     <div>
-      <button onClick={() => { fetch('/api/favorites').then(r => r.json()).then(d => { const ids = Array.isArray(d) ? d.map(x => x.id) : []; if(ids.length === 0) return; Promise.all(ids.map(id => fetch('/api/favorites/'+id+'/prices', {method:'POST'}))).then(() => load()); }); }} style={{ padding: '6px 10px', borderRadius: 6, border: 'none', background: '#38bdf8', color: '#0f172a', fontWeight: 700, fontSize: 12, cursor: 'pointer', marginBottom: 8 }}>Preise aktualisieren</button>
+      <button disabled={updating || progress} onClick={handleUpdate} style={{ padding: '6px 10px', borderRadius: 6, border: 'none', background: (updating || progress) ? '#475569' : '#38bdf8', color: '#0f172a', fontWeight: 700, fontSize: 12, cursor: (updating || progress) ? 'not-allowed' : 'pointer', marginBottom: 8 }}>
+        {progress || updating ? 'Preise aktualisieren... (running)' : 'Preise aktualisieren'}
+      </button>
       {prices.map(f => (
         <div key={f.id} style={{ padding: '8px 0', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
           <div style={{ color: '#f8fafc', fontWeight: 600, fontSize: 13 }}>{f.destination_airport || 'Destination'} <span style={{ color: '#38bdf8', fontWeight: 400 }}>{f.trip_date}</span></div>
-          <div style={{ color: '#94a3b8', fontSize: 12 }}>{f.start_time || ''} — Hinflug: <strong style={{color:'#f8fafc'}}>{f.price_outbound !== null ? f.price_outbound + ' EUR' : '—'}</strong> | Rückflug: <strong style={{color:'#f8fafc'}}>{f.price_return !== null ? f.price_return + ' EUR' : '—'}</strong></div>
+          <div style={{ color: '#94a3b8', fontSize: 12 }}>{f.start_airport || ''} — Hinflug: <strong style={{color:'#f8fafc'}}>{f.price_outbound !== null && f.price_outbound !== undefined ? f.price_outbound + ' EUR' : '—'}</strong> | Rückflug: <strong style={{color:'#f8fafc'}}>{f.price_return !== null && f.price_return !== undefined ? f.price_return + ' EUR' : '—'}</strong></div>
           <div style={{ color: '#cbd5e1', fontSize: 12, marginTop: 2}}>Summe: <strong style={{ color: '#38bdf8' }}>{f.price_total !== null ? f.price_total + ' EUR' : '—'}</strong> {f.currency ? '('+f.currency+')' : ''} {f.fetched_at ? '| aktualisiert '+f.fetched_at.split('T')[0] : ''}</div>
+            <button onClick={async () => { await fetch('/api/favorites/'+f.id, {method:'DELETE'}); load(); }} style={{ marginTop: 6, padding: '4px 10px', borderRadius: 6, border: 'none', background: '#ef4444', color: '#fff', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>Delete</button>
         </div>
       ))}
     </div>
