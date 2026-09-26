@@ -10,7 +10,7 @@ import os
 
 # Configurable paths for testing vs production
 FRONTEND_BUILD_DIR = os.environ.get("FRONTEND_BUILD_DIR", "/app/frontend/build")
-DB_PATH = os.environ.get("DB_FILE", "/opt/skybreak/skybreak.db")
+DB_PATH = os.environ.get("DB_FILE", "/data/skybreak.db")
 
 app = Flask(__name__, static_folder=os.path.join(FRONTEND_BUILD_DIR, "static"), static_url_path="/static")
 
@@ -179,23 +179,43 @@ def settings():
         conn.close()
         return jsonify({r[0]: r[1] for r in rows})
 
-@app.route("/api/favorites", methods=["GET"])
-def list_favorites():
-    conn = sqlite3.connect(DB_PATH, timeout=30.0)
-    rows = conn.execute("SELECT id, trip_date, start_time, destination_airport, outbound_flight_number, return_flight_number, created_at FROM favorite_trips ORDER BY created_at DESC").fetchall()
-    conn.close()
-    return jsonify([{"id": r[0], "trip_date": r[1], "start_time": r[2], "destination_airport": r[3], "outbound_flight_number": r[4], "return_flight_number": r[5], "created_at": r[6]} for r in rows])
 
 @app.route("/api/favorites", methods=["POST"])
 def create_favorite():
-    data = request.get_json(force=True)
+    data = request.get_json() or {}
     conn = sqlite3.connect(DB_PATH, timeout=30.0)
-    conn.execute("INSERT INTO favorite_trips (trip_date, start_time, destination_airport, outbound_flight_number, return_flight_number) VALUES (?, ?, ?, ?, ?)",
-                 (data.get("trip_date"), data.get("start_time"), data.get("destination_airport"), data.get("outbound_flight_number"), data.get("return_flight_number")))
+    conn.execute("INSERT INTO favorite_trips (trip_date, start_time, destination_airport, outbound_flight_number, return_flight_number, start_airport) VALUES (?, ?, ?, ?, ?, ?)", (
+        data.get("trip_date"), data.get("start_time"), data.get("destination_airport"),
+        data.get("outbound_flight_number"), data.get("return_flight_number"), data.get("start_airport")
+    ))
     conn.commit()
-    new_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
     conn.close()
-    return jsonify({"saved": True, "id": new_id})
+    return jsonify({"created": True}), 201
+
+@app.route("/api/favorites", methods=["GET"])
+def list_favorites():
+    # fast-flights bei jedem Aufruf der prices-Ansicht abfragen
+    from skybreak.flight_prices import fetch_prices_favorite
+    conn = sqlite3.connect(DB_PATH, timeout=30.0)
+    rows = conn.execute("SELECT id FROM favorite_trips").fetchall()
+    conn.close()
+    for (fav_id,) in rows:
+        try:
+            fetch_prices_favorite(fav_id)
+        except Exception:
+            pass
+    conn = sqlite3.connect(DB_PATH, timeout=30.0)
+    rows = conn.execute("SELECT id, trip_date, start_time, destination_airport, outbound_flight_number, return_flight_number, start_airport, created_at FROM favorite_trips ORDER BY created_at DESC").fetchall()
+    conn.close()
+    from skybreak.flight_prices import get_prices_for_favorite
+    result = []
+    for r in rows:
+        prices = get_prices_for_favorite(r[0]) or {}
+        result.append({"id": r[0], "trip_date": r[1], "start_time": r[2], "destination_airport": r[3],
+                       "outbound_flight_number": r[4], "return_flight_number": r[5], "start_airport": r[6], "created_at": r[7],
+                       "price_outbound": prices.get("price_outbound"), "price_return": prices.get("price_return"),
+                       "price_total": prices.get("price_total"), "currency": prices.get("currency"), "fetched_at": prices.get("fetched_at")})
+    return jsonify(result)
 
 @app.route("/api/favorites/<int:fav_id>", methods=["DELETE"])
 def delete_favorite(fav_id):
@@ -205,7 +225,15 @@ def delete_favorite(fav_id):
     conn.close()
     return jsonify({"deleted": fav_id})
 
+
+@app.route("/api/favorites/<int:fav_id>/prices", methods=["POST"])
+def favorite_prices(fav_id):
+    from skybreak.flight_prices import fetch_prices_favorite
+    result = fetch_prices_favorite(fav_id)
+    return jsonify({"updated": True, "result": result})
+
 @app.route("/api/turnarounds", methods=["GET"])
+
 
 @app.route("/api/turnarounds", methods=["GET"])
 def find_short_trips():

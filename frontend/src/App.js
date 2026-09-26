@@ -9,6 +9,26 @@ const NAV = [
   { key: 'flights', label: 'Flights', icon: '🛫' },
   { key: 'settings', label: 'Settings', icon: '⚙️' },
 ];
+function FavoriteTripPrices() {
+  const [prices, setPrices] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const load = () => { setLoading(true); fetch('/api/favorites').then(r => r.json()).then(d => { setPrices(Array.isArray(d) ? d : []); }).catch(() => setPrices([])).finally(() => setLoading(false)); };
+  useEffect(() => { load(); }, []);
+  if (!prices.length) return <p style={{ color: '#94a3b8', fontSize: 13 }}>No favorites yet.</p>;
+  return (
+    <div>
+      <button onClick={() => { fetch('/api/favorites').then(r => r.json()).then(d => { const ids = Array.isArray(d) ? d.map(x => x.id) : []; if(ids.length === 0) return; Promise.all(ids.map(id => fetch('/api/favorites/'+id+'/prices', {method:'POST'}))).then(() => load()); }); }} style={{ padding: '6px 10px', borderRadius: 6, border: 'none', background: '#38bdf8', color: '#0f172a', fontWeight: 700, fontSize: 12, cursor: 'pointer', marginBottom: 8 }}>Preise aktualisieren</button>
+      {prices.map(f => (
+        <div key={f.id} style={{ padding: '8px 0', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+          <div style={{ color: '#f8fafc', fontWeight: 600, fontSize: 13 }}>{f.destination_airport || 'Destination'} <span style={{ color: '#38bdf8', fontWeight: 400 }}>{f.trip_date}</span></div>
+          <div style={{ color: '#94a3b8', fontSize: 12 }}>{f.start_time || ''} — Hinflug: <strong style={{color:'#f8fafc'}}>{f.price_outbound !== null ? f.price_outbound + ' EUR' : '—'}</strong> | Rückflug: <strong style={{color:'#f8fafc'}}>{f.price_return !== null ? f.price_return + ' EUR' : '—'}</strong></div>
+          <div style={{ color: '#cbd5e1', fontSize: 12, marginTop: 2}}>Summe: <strong style={{ color: '#38bdf8' }}>{f.price_total !== null ? f.price_total + ' EUR' : '—'}</strong> {f.currency ? '('+f.currency+')' : ''} {f.fetched_at ? '| aktualisiert '+f.fetched_at.split('T')[0] : ''}</div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function FavoriteTrips() {
   const [favs, setFavs] = useState([]);
   useEffect(() => {
@@ -281,6 +301,7 @@ export default function App() {
                 <button onClick={() => setFlightDate(new Date(new Date(flightDate).getTime() - 86400000).toISOString().split('T')[0])} style={{ padding: '10px 14px', borderRadius: 10, border: 'none', background: 'linear-gradient(135deg,#6366f1,#4f46e5)', color: '#fff', fontWeight: 700, cursor: 'pointer', fontSize: 13 }}>◀ Vorheriger Tag</button>
                 <button onClick={() => setFlightDate(new Date().toISOString().split('T')[0])} style={{ padding: '10px 14px', borderRadius: 10, border: 'none', background: 'linear-gradient(135deg,#f59e0b,#d97706)', color: '#fff', fontWeight: 700, cursor: 'pointer', fontSize: 13 }}>Heute</button>
                 <button onClick={() => setFlightDate(new Date(new Date(flightDate).getTime() + 86400000).toISOString().split('T')[0])} style={{ padding: '10px 14px', borderRadius: 10, border: 'none', background: 'linear-gradient(135deg,#6366f1,#4f46e5)', color: '#fff', fontWeight: 700, cursor: 'pointer', fontSize: 13 }}>Nächster Tag ▶</button>
+                <button onClick={() => fetch('/api/flights/fetch-now', {method:'POST'}).then(r => alert('Fetch gestartet'))} style={{padding:'6px 12px', borderRadius:8, border:'none', background:'#10b981', color:'#fff', fontWeight:700, cursor:'pointer', fontSize:13}}>Fetch Now</button>
                 
                 {scrapeRunning && (
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 12px', borderRadius: 8, background: 'rgba(16,185,129,0.15)', border: '1px solid rgba(16,185,129,0.35)' }}>
@@ -440,7 +461,7 @@ export default function App() {
                                         {(t.rueckflug_abflug_zeit ? (t.rueckflug_abflug_zeit.substring ? t.rueckflug_abflug_zeit.substring(0,10) + ', ' + t.rueckflug_abflug_zeit.substring(11,16) : t.rueckflug_abflug_zeit.substring(0,10) + ', ' + t.rueckflug_abflug_zeit.substring(11,16)) : '-') + ' | ' + (t.rueckflug_flight_number || '-')}
                                       </td>
                                       <td style={{ padding: '6px 8px', color: '#38bdf8' }}>{(t.dauer_tage !== undefined ? t.dauer_tage + 'd' : (t.days ? t.days + 'd' : '-'))}</td>
-                                      <td style={{ padding: '6px 8px' }}><span style={{ color: t.is_favorite ? '#38bdf8' : '#94a3b8', fontWeight: 700, fontSize: 13 }}>{t.is_favorite ? '★ Favorited' : '☆ Not saved'}</span></td>
+                                      <td style={{ padding: '6px 8px' }}><button onClick={async () => { const res = await fetch('/api/favorites', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({trip_date:t.hinflug_abflug_zeit ? t.hinflug_abflug_zeit.split(' ')[0] : '', start_time:t.hinflug_abflug_zeit ? t.hinflug_abflug_zeit.split(' ')[1] || '' : '', destination_airport: t.destination || t.hinflug_ziel || '', outbound_flight_number:t.hinflug_flight_number || '', return_flight_number:t.rueckflug_flight_number || '', start_airport: startAirport || ''})}); if(res.ok) { const idx = turnarounds.indexOf(t); if(idx >= 0) { const copy = [...turnarounds]; copy[idx] = {...copy[idx], is_favorite: true}; setTurnarounds(copy); } } }} style={{ padding:'4px 8px', borderRadius:6, border:'none', background: t.is_favorite ? '#38bdf8' : '#1e293b', color:'#fff', fontWeight:600, fontSize:12, cursor:'pointer', minWidth:110 }}>{t.is_favorite ? '★ Favorited' : '+ Favorit hinzufügen'}</button></td>
                                     </tr>
                                   ))}
                                 </tbody>
@@ -463,8 +484,8 @@ export default function App() {
             }}>
               <h3 style={{ margin: '0 0 14px', fontSize: 18, fontWeight: 700, color: '#f8fafc' }}>Cost Overview</h3>
               <div style={{ marginTop: 10, padding: 12, background: 'rgba(255,255,255,0.06)', borderRadius: 10, border: '1px solid rgba(255,255,255,0.1)' }}>
-                <h4 style={{ color: '#f8fafc', fontSize: 14, marginBottom: 8 }}>Favorite Trips</h4>
-                <FavoriteTrips />
+                <h4 style={{ color: '#f8fafc', fontSize: 14, marginBottom: 8 }}>Favorite Trips — Preise</h4>
+                <FavoriteTripPrices />
               </div>
             </section>
           )}

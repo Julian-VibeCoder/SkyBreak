@@ -5,3 +5,5 @@ tenacity
 apscheduler
 airportsdata
 requests
+fast-flights[local]==2.2
+typing_extensions
