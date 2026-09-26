@@ -1,7 +1,7 @@
 """Streamlined DB migration: version saved in db, steps per schema change, applied at startup."""
 import sqlite3, os, logging
 logger = logging.getLogger(__name__)
-DB_FILE = os.environ.get("DB_FILE", "/opt/skybreak/skybreak.db")
+DB_FILE = os.environ.get("DB_FILE", "/data/skybreak.db")
 
 def get_current_version(conn):
     try:

@@ -1,7 +1,7 @@
 import json, logging, sqlite3, subprocess, sys, os
 from datetime import datetime, timedelta
 from skybreak.airport import get_setting, fetch_airport_name, init_db
-DB_PATH = os.environ.get("DB_FILE", "/opt/skybreak/skybreak.db")
+DB_PATH = os.environ.get("DB_FILE", "/data/skybreak.db")
 logger = logging.getLogger(__name__)
 
 def _run_kayak(airport, month, delay=None):
