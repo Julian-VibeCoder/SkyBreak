@@ -50,5 +50,6 @@ EXPOSE 80
 ENV PYTHONUNBUFFERED=1
 ENV FLASK_APP=skybreak/app DB_FILE=/data/skybreak.db FRONTEND_BUILD_DIR=/app/frontend/build
 RUN mkdir -p /data
+RUN python -m playwright install chromium
 # DB init handled by container at startup (not build)
 CMD ["python", "-m", "skybreak.app"]

@@ -14,27 +14,68 @@ function FavoriteTripPrices() {
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState(false);
   const [progress, setProgress] = useState(false);
+  const [sortKey, setSortKey] = useState('price_total');
+  const [sortDir, setSortDir] = useState('desc');
   const load = () => { setLoading(true); fetch('/api/favorites').then(r => r.json()).then(d => { setPrices(Array.isArray(d) ? d : []); }).catch(() => setPrices([])).finally(() => setLoading(false)); };
   useEffect(() => { load(); const iv = setInterval(() => { fetch('/api/prices/status').then(r=>r.json()).then(s=>{if(s.running){setProgress(true);}else{setProgress(false);}}).catch(()=>{}); }, 1500); return () => clearInterval(iv); }, []);
   if (!prices.length) return <p style={{ color: '#94a3b8', fontSize: 13 }}>No favorites yet.</p>;
-  const handleUpdate = () => {
-    if (updating || progress) return;
-    setUpdating(true); setProgress(true);
-    fetch('/api/prices', {method:'POST'}).then(r => r.json()).then(d => { if(d.updated) { setTimeout(load, 800); } else { setProgress(false); } }).catch(() => setProgress(false)).finally(() => setUpdating(false));
-  };
+  const handleUpdate = () => { if (updating || progress) return; setUpdating(true); setProgress(true); fetch('/api/prices', {method:'POST'}).then(r => r.json()).then(d => { if(d.updated) { setTimeout(load, 800); } else { setProgress(false); } }).catch(() => setProgress(false)).finally(() => setUpdating(false)); };
+  const sorted = [...prices].sort((a,b) => {
+    let av = a[sortKey], bv = b[sortKey];
+    if (av == null) av = -Infinity; if (bv == null) bv = -Infinity;
+    if (typeof av === 'string') av = av.toLowerCase(); if (typeof bv === 'string') bv = bv.toLowerCase();
+    if (av < bv) return sortDir === 'asc' ? -1 : 1;
+    if (av > bv) return sortDir === 'asc' ? 1 : -1;
+    return 0;
+  });
+  const fmtTime = (t) => { if (!t) return '—'; if (t.includes('T')) return t.substring(11,16); const parts = String(t).split(' '); return parts.length > 1 ? parts[1].substring(0,5) : t; };
+  const fmtDur = (m) => { if (m == null || m === undefined || m === '') return '—'; return m + ' min'; };
+  const headerBtn = (key, label) => (
+    <button onClick={() => { if (sortKey === key) { setSortDir(sortDir === 'asc' ? 'desc' : 'asc'); } else { setSortKey(key); setSortDir('asc'); } }} style={{ background:'none', border:'none', color:'#f8fafc', fontWeight:700, fontSize:11, cursor:'pointer', padding:0 }}>
+      {label} {sortKey === key ? (sortDir === 'asc' ? '▲' : '▼') : ''}
+    </button>
+  );
   return (
     <div>
       <button disabled={updating || progress} onClick={handleUpdate} style={{ padding: '6px 10px', borderRadius: 6, border: 'none', background: (updating || progress) ? '#475569' : '#38bdf8', color: '#0f172a', fontWeight: 700, fontSize: 12, cursor: (updating || progress) ? 'not-allowed' : 'pointer', marginBottom: 8 }}>
         {progress || updating ? 'Preise aktualisieren... (running)' : 'Preise aktualisieren'}
       </button>
-      {prices.map(f => (
-        <div key={f.id} style={{ padding: '8px 0', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
-          <div style={{ color: '#f8fafc', fontWeight: 600, fontSize: 13 }}>{f.destination_airport || 'Destination'} <span style={{ color: '#38bdf8', fontWeight: 400 }}>{f.trip_date}</span></div>
-          <div style={{ color: '#94a3b8', fontSize: 12 }}>{f.start_airport || ''} — Hinflug: <strong style={{color:'#f8fafc'}}>{f.price_outbound !== null && f.price_outbound !== undefined ? f.price_outbound + ' EUR' : '—'}</strong> | Rückflug: <strong style={{color:'#f8fafc'}}>{f.price_return !== null && f.price_return !== undefined ? f.price_return + ' EUR' : '—'}</strong></div>
-          <div style={{ color: '#cbd5e1', fontSize: 12, marginTop: 2}}>Summe: <strong style={{ color: '#38bdf8' }}>{f.price_total !== null ? f.price_total + ' EUR' : '—'}</strong> {f.currency ? '('+f.currency+')' : ''} {f.fetched_at ? '| aktualisiert '+f.fetched_at.split('T')[0] : ''}</div>
-            <button onClick={async () => { await fetch('/api/favorites/'+f.id, {method:'DELETE'}); load(); }} style={{ marginTop: 6, padding: '4px 10px', borderRadius: 6, border: 'none', background: '#ef4444', color: '#fff', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>Delete</button>
-        </div>
-      ))}
+      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, color: '#f1f5f9' }}>
+        <thead>
+          <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.15)', textAlign: 'left' }}>
+            <th style={{ padding: 6 }}>{headerBtn('start_city_country', 'Start')}</th>
+            <th style={{ padding: 6 }}>{headerBtn('dest_city_country', 'Ziel')}</th>
+            <th style={{ padding: 6 }}>{headerBtn('trip_date', 'Hinflug')}</th>
+            <th style={{ padding: 6 }}>{headerBtn('trip_date', 'Rückflug')}</th>
+            <th style={{ padding: 6 }}>{headerBtn('price_total', 'Kosten')}</th>
+            <th style={{ padding: 6 }}></th>
+          </tr>
+        </thead>
+        <tbody>
+          {sorted.map(f => (
+            <tr key={f.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+              <td style={{ padding: 6, verticalAlign: 'top' }}>{f.start_city_country || '—'} <span style={{ color: '#94a3b8', fontSize: 10 }}>({f.start_airport || ''})</span></td>
+              <td style={{ padding: 6, verticalAlign: 'top' }}>{f.dest_city_country || '—'} <span style={{ color: '#94a3b8', fontSize: 10 }}>({f.destination_airport || ''})</span></td>
+              <td style={{ padding: 6, verticalAlign: 'top' }}>
+                <div style={{ fontWeight: 600 }}>{f.outbound_trip_date || f.trip_date} {fmtTime(f.outbound_departure)}</div>
+                <div style={{ color: '#cbd5e1', fontSize: 11 }}>{f.outbound_flight || f.outbound_flight_number || '—'} {fmtDur(f.duration_outbound_minutes)}</div>
+              </td>
+              <td style={{ padding: 6, verticalAlign: 'top' }}>
+                <div style={{ fontWeight: 600 }}>{f.return_trip_date || f.trip_date} {fmtTime(f.return_departure)}</div>
+                <div style={{ color: '#cbd5e1', fontSize: 11 }}>{f.return_flight || f.return_flight_number || '—'} {fmtDur(f.duration_return_minutes)}</div>
+              </td>
+              <td style={{ padding: 6, verticalAlign: 'top', whiteSpace: 'nowrap' }}>
+                <div>Hin: <strong>{f.price_outbound != null ? f.price_outbound + ' €' : '—'}</strong></div>
+                <div>Rück: <strong>{f.price_return != null ? f.price_return + ' €' : '—'}</strong></div>
+                <div style={{ color: '#38bdf8', fontWeight: 700 }}>Gesamt: {f.price_total != null ? f.price_total + ' €' : '—'} {f.currency ? '('+f.currency+')' : ''}</div>
+              </td>
+              <td style={{ padding: 6, textAlign: 'right', verticalAlign: 'top' }}>
+                <button onClick={async () => { await fetch('/api/favorites/'+f.id, {method:'DELETE'}); load(); }} style={{ padding: '4px 8px', borderRadius: 6, border: 'none', background: '#ef4444', color: '#fff', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>Löschen</button>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }
@@ -471,7 +512,7 @@ export default function App() {
                                         {(t.rueckflug_abflug_zeit ? (t.rueckflug_abflug_zeit.substring ? t.rueckflug_abflug_zeit.substring(0,10) + ', ' + t.rueckflug_abflug_zeit.substring(11,16) : t.rueckflug_abflug_zeit.substring(0,10) + ', ' + t.rueckflug_abflug_zeit.substring(11,16)) : '-') + ' | ' + (t.rueckflug_flight_number || '-')}
                                       </td>
                                       <td style={{ padding: '6px 8px', color: '#38bdf8' }}>{(t.dauer_tage !== undefined ? t.dauer_tage + 'd' : (t.days ? t.days + 'd' : '-'))}</td>
-                                      <td style={{ padding: '6px 8px' }}><button onClick={async () => { const res = await fetch('/api/favorites', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({trip_date:t.hinflug_abflug_zeit ? t.hinflug_abflug_zeit.split(' ')[0] : '', start_time:t.hinflug_abflug_zeit ? t.hinflug_abflug_zeit.split(' ')[1] || '' : '', destination_airport: t.destination || t.hinflug_ziel || '', outbound_flight_number:t.hinflug_flight_number || '', return_flight_number:t.rueckflug_flight_number || '', start_airport: startAirport || ''})}); if(res.ok) { const idx = turnarounds.indexOf(t); if(idx >= 0) { const copy = [...turnarounds]; copy[idx] = {...copy[idx], is_favorite: true}; setTurnarounds(copy); } } }} style={{ padding:'4px 8px', borderRadius:6, border:'none', background: t.is_favorite ? '#38bdf8' : '#1e293b', color:'#fff', fontWeight:600, fontSize:12, cursor:'pointer', minWidth:110 }}>{t.is_favorite ? '★ Favorited' : '+ Favorit hinzufügen'}</button></td>
+                                      <td style={{ padding: '6px 8px' }}><button onClick={async () => { const res = await fetch('/api/favorites', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({trip_date:t.hinflug_abflug_zeit ? t.hinflug_abflug_zeit.split(' ')[0] : '', outbound_trip_date:t.hinflug_abflug_zeit ? t.hinflug_abflug_zeit.split(' ')[0] : '', return_trip_date:t.rueckflug_abflug_zeit ? t.rueckflug_abflug_zeit.split(' ')[0] : '', start_time:t.hinflug_abflug_zeit ? t.hinflug_abflug_zeit.split(' ')[1] || '' : '', destination_airport: t.destination || t.hinflug_ziel || '', outbound_flight_number:t.hinflug_flight_number || '', return_flight_number:t.rueckflug_flight_number || '', start_airport: startAirport || ''})}); if(res.ok) { const idx = turnarounds.indexOf(t); if(idx >= 0) { const copy = [...turnarounds]; copy[idx] = {...copy[idx], is_favorite: true}; setTurnarounds(copy); } } }} style={{ padding:'4px 8px', borderRadius:6, border:'none', background: t.is_favorite ? '#38bdf8' : '#1e293b', color:'#fff', fontWeight:600, fontSize:12, cursor:'pointer', minWidth:110 }}>{t.is_favorite ? '★ Favorited' : '+ Favorit hinzufügen'}</button></td>
                                     </tr>
                                   ))}
                                 </tbody>

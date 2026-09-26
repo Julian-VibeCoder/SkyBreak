@@ -10,18 +10,18 @@ def fetch_prices_favorite(favorite_id):
         import fast_flights
         conn = sqlite3.connect(DB_PATH, timeout=30.0)
         row = conn.execute(
-            "SELECT trip_date, start_airport, destination_airport FROM favorite_trips WHERE id = ?",
+            "SELECT trip_date, start_airport, destination_airport, outbound_trip_date, return_trip_date FROM favorite_trips WHERE id = ?",
             (favorite_id,)).fetchone()
         conn.close()
         if not row:
             return None
-        trip_date, start_airport, dest_airport = row
+        trip_date, start_airport, dest_airport, out_trip_date, ret_trip_date = row
         if not start_airport or not dest_airport:
             logger.warning("Favorit %s fehlt Start-/Ziel-Flughafen", favorite_id)
             return None
         # Hinflug
         result_out = fast_flights.get_flights(
-            flight_data=[fast_flights.FlightData(date=str(trip_date), from_airport=start_airport, to_airport=dest_airport)],
+            flight_data=[fast_flights.FlightData(date=str(out_trip_date or trip_date), from_airport=start_airport, to_airport=dest_airport)],
             trip="one-way", seat="economy", passengers=fast_flights.Passengers(adults=1), fetch_mode="local"
         )
         price_out = None
@@ -34,7 +34,7 @@ def fetch_prices_favorite(favorite_id):
             price_out = parse_price(price_str)
         # Rückflug
         result_ret = fast_flights.get_flights(
-            flight_data=[fast_flights.FlightData(date=str(trip_date), from_airport=dest_airport, to_airport=start_airport)],
+            flight_data=[fast_flights.FlightData(date=str(ret_trip_date or trip_date), from_airport=dest_airport, to_airport=start_airport)],
             trip="one-way", seat="economy", passengers=fast_flights.Passengers(adults=1), fetch_mode="local"
         )
         price_ret = None

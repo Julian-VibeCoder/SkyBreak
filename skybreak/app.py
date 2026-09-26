@@ -1,7 +1,7 @@
 import logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 from flask import Flask, request, jsonify, send_from_directory
-from skybreak.airport_lookup import fetch_airport_name
+from skybreak.airport_lookup import fetch_airport_name, fetch_city_country
 from skybreak.airport import add_airport, delete_airport, validate_iata
 import sqlite3
 import threading
@@ -186,9 +186,10 @@ def settings():
 def create_favorite():
     data = request.get_json() or {}
     conn = sqlite3.connect(DB_PATH, timeout=30.0)
-    conn.execute("INSERT INTO favorite_trips (trip_date, start_time, destination_airport, outbound_flight_number, return_flight_number, start_airport) VALUES (?, ?, ?, ?, ?, ?)", (
+    conn.execute("INSERT INTO favorite_trips (trip_date, start_time, destination_airport, outbound_flight_number, return_flight_number, start_airport, outbound_trip_date, return_trip_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", (
         data.get("trip_date"), data.get("start_time"), data.get("destination_airport"),
-        data.get("outbound_flight_number"), data.get("return_flight_number"), data.get("start_airport")
+        data.get("outbound_flight_number"), data.get("return_flight_number"), data.get("start_airport"),
+        (data.get("outbound_trip_date") or data.get("trip_date")), (data.get("return_trip_date") or data.get("trip_date"))
     ))
     conn.commit()
     conn.close()
@@ -197,16 +198,72 @@ def create_favorite():
 @app.route("/api/favorites", methods=["GET"])
 def list_favorites():
     conn = sqlite3.connect(DB_PATH, timeout=30.0)
-    rows = conn.execute("SELECT id, trip_date, start_time, destination_airport, outbound_flight_number, return_flight_number, start_airport, created_at FROM favorite_trips ORDER BY created_at DESC").fetchall()
+    rows = conn.execute("SELECT id, trip_date, start_time, destination_airport, outbound_flight_number, return_flight_number, start_airport, created_at, outbound_trip_date, return_trip_date FROM favorite_trips ORDER BY created_at DESC").fetchall()
     conn.close()
     from skybreak.flight_prices import get_prices_for_favorite
     result = []
     for r in rows:
         prices = get_prices_for_favorite(r[0]) or {}
+        # Flugdaten für Hinflug und Rückflug suchen
+        trip_date = r[1] or ''
+        out_trip_date = r[8] or trip_date or ''
+        ret_trip_date = r[9] or trip_date or ''
+        start_airport = r[6] or ''
+        dest_airport = r[3] or ''
+        out_fnum = r[4] or ''
+        ret_fnum = r[5] or ''
+        out_dep = out_arr = ret_dep = ret_arr = out_flight = ret_flight = None
+        conn2 = sqlite3.connect(DB_PATH, timeout=30.0)
+        try:
+            if out_trip_date and start_airport and dest_airport and out_fnum:
+                row_out = conn2.execute(
+                    "SELECT airport_icao, destination_icao, flight_number, departure_time, arrival_time FROM flights WHERE flight_number = ? AND date(departure_time) = ? LIMIT 1",
+                    (out_fnum, out_trip_date)
+                ).fetchone()
+                if row_out:
+                    out_dep = row_out[3]; out_arr = row_out[4]; out_flight = row_out[2]
+            if ret_trip_date and start_airport and dest_airport and ret_fnum:
+                row_ret = conn2.execute(
+                    "SELECT airport_icao, destination_icao, flight_number, departure_time, arrival_time FROM flights WHERE flight_number = ? AND date(departure_time) = ? LIMIT 1",
+                    (ret_fnum, ret_trip_date)
+                ).fetchone()
+                if row_ret:
+                    ret_dep = row_ret[3]; ret_arr = row_ret[4]; ret_flight = row_ret[2]
+        finally:
+            conn2.close()
+        start_city_country = fetch_city_country(start_airport)
+        dest_city_country = fetch_city_country(dest_airport)
+        # Dauer berechnen (Hinflug)
+        duration_out = None
+        if out_dep and out_arr:
+            try:
+                from datetime import datetime
+                d1 = datetime.fromisoformat(str(out_dep).replace("Z","+00:00"))
+                d2 = datetime.fromisoformat(str(out_arr).replace("Z","+00:00"))
+                duration_out = int(round((d2 - d1).total_seconds() / 60))
+            except Exception:
+                pass
+        duration_ret = None
+        if ret_dep and ret_arr:
+            try:
+                from datetime import datetime
+                d1 = datetime.fromisoformat(str(ret_dep).replace("Z","+00:00"))
+                d2 = datetime.fromisoformat(str(ret_arr).replace("Z","+00:00"))
+                duration_ret = int(round((d2 - d1).total_seconds() / 60))
+            except Exception:
+                pass
+        start_name = fetch_airport_name(start_airport) or start_airport or ""
+        dest_name = fetch_airport_name(dest_airport) or dest_airport or ""
         result.append({"id": r[0], "trip_date": r[1], "start_time": r[2], "destination_airport": r[3],
                        "outbound_flight_number": r[4], "return_flight_number": r[5], "start_airport": r[6], "created_at": r[7],
+                       "outbound_trip_date": r[8], "return_trip_date": r[9],
                        "price_outbound": prices.get("price_outbound"), "price_return": prices.get("price_return"),
-                       "price_total": prices.get("price_total"), "currency": prices.get("currency"), "fetched_at": prices.get("fetched_at")})
+                       "price_total": prices.get("price_total"), "currency": prices.get("currency"), "fetched_at": prices.get("fetched_at"),
+                       "outbound_departure": out_dep, "outbound_arrival": out_arr, "outbound_flight": out_flight,
+                       "return_departure": ret_dep, "return_arrival": ret_arr, "return_flight": ret_flight,
+                       "start_airport_name": start_name, "destination_airport_name": dest_name,
+                       "start_city_country": start_city_country, "dest_city_country": dest_city_country,
+                       "duration_outbound_minutes": duration_out, "duration_return_minutes": duration_ret})
     return jsonify(result)
 
 @app.route("/api/favorites/<int:fav_id>", methods=["DELETE"])
@@ -387,17 +444,26 @@ def find_short_trips():
     ergebnisse.sort(key=lambda x: x.get("hinflug_abflug_zeit", ""))
     # Favoriten-Status ergänzen
     conn = sqlite3.connect(DB_PATH, timeout=30.0)
-    fav_rows = conn.execute("SELECT trip_date, start_time, destination_airport, outbound_flight_number, return_flight_number FROM favorite_trips").fetchall()
+    fav_rows = conn.execute("SELECT outbound_trip_date, destination_airport, outbound_flight_number, return_flight_number, return_trip_date FROM favorite_trips").fetchall()
     conn.close()
     fav_set = set()
     for r in fav_rows:
-        fav_set.add((r[0], r[2], r[3], r[4]))  # (trip_date, destination_airport, outbound_flight, return_flight)
+        out_date = r[0] or ''
+        ret_date = r[4] or ''
+        fav_set.add((out_date, r[1], r[2], r[3], ret_date, r[3]))  # out_date, dest, out_f, ret_f, ret_date, ret_f
     for item in ergebnisse:
         trip_date = str(item.get("hinflug_abflug_zeit", "")).split()[0] if item.get("hinflug_abflug_zeit") else ""
         dest = item.get("hinflug_ziel") or item.get("destination") or ""
         out_f = item.get("hinflug_flight_number") or ""
         ret_f = item.get("rueckflug_flight_number") or ""
-        item["is_favorite"] = (trip_date, dest, out_f, ret_f) in fav_set
+        ret_date_guess = trip_date
+        # Prüfe sowohl mit als auch ohne separate Rückflug-Daten
+        item["is_favorite"] = False
+        for fav in fav_set:
+            # fav = (out_date, dest, out_f, ret_f, ret_date, ret_f2) — ret_f == ret_f2
+            if (trip_date == fav[0] or trip_date == '') and dest == fav[1] and out_f == fav[2] and ret_f == fav[3]:
+                item["is_favorite"] = True
+                break
     return jsonify({"turnarounds": ergebnisse, "count": len(ergebnisse), "algorithm": "sql_filter_hash_join"})
 
 if __name__ == "__main__":
