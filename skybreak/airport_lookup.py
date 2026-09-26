@@ -27,3 +27,16 @@ def fetch_airport_name(iata_code: str) -> str:
     except Exception:
         _airport_cache[code] = ""
         return ""
+
+def fetch_city_country(iata_code: str) -> str:
+    full = fetch_airport_name(iata_code)
+    if not full:
+        return iata_code or ""
+    # Extrahiere Inhalt in Klammern: (Stadt, Land)
+    start = full.rfind('(')
+    end = full.rfind(')')
+    if start != -1 and end != -1 and end > start:
+        inner = full[start+1:end]
+        return inner
+    # Fallback: falls kein Klammer, versuche nur Code zurückzugeben
+    return iata_code or ""

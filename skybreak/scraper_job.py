@@ -125,6 +125,32 @@ def start_scheduler():
     scheduler.add_job(scrape_all_airports, "interval", minutes=interval)
     scheduler.start()
 
+def start_price_scheduler():
+    from apscheduler.schedulers.background import BackgroundScheduler
+    try: interval = int(get_setting("price_fetch_interval_hours") or "6")
+    except: interval = 6
+    if interval == 0: logger.info("Preis-Scheduler disabled"); return
+    interval = max(1, min(interval, 168)) * 60  # in Minuten
+    scheduler = BackgroundScheduler()
+    scheduler.add_job(scrape_favorite_prices, "interval", minutes=interval)
+    scheduler.start()
+    logger.info("Preis-Scheduler gestartet: %d Minuten", interval)
+
+def scrape_favorite_prices():
+    """Preise aller favorisierten Trips abfragen, nur wenn letzter Preis >12h alt."""
+    try:
+        conn = sqlite3.connect(DB_PATH, timeout=30.0)
+        rows = conn.execute("SELECT id FROM favorite_trips").fetchall()
+        conn.close()
+        from skybreak.flight_prices import fetch_prices_favorite
+        for (fav_id,) in rows:
+            try:
+                fetch_prices_favorite(fav_id, force=False)  # 12h-Schwelle drin
+            except Exception as e:
+                logger.warning("Preis-Update Favorit %s fehlgeschlagen: %s", fav_id, e)
+    except Exception as e:
+        logger.warning("Preis-Scheduler Fehler: %s", e)
+
 def save_flights(airport, flights, month=None):
     # Handle nested API-style flight objects (departure/arrival with scheduledTime/airport)
     parsed = []

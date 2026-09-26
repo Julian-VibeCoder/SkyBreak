@@ -72,6 +72,13 @@ def migration_v3(conn):
     conn.execute("INSERT INTO db_version (version) VALUES (3)")
     logger.info("Applied migration v3")
 
+def migration_v4(conn):
+    conn.execute("CREATE TABLE IF NOT EXISTS favorite_trip_prices (favorite_id INTEGER, price_outbound REAL, price_return REAL, price_total REAL, currency TEXT, fetched_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_favorite_prices ON favorite_trip_prices (favorite_id, fetched_at)")
+    conn.execute("DELETE FROM db_version")
+    conn.execute("INSERT INTO db_version (version) VALUES (4)")
+    logger.info("Applied migration v4")
+
 def apply_migrations():
     conn = sqlite3.connect(DB_FILE, timeout=30.0)
     current = get_current_version(conn)
@@ -83,6 +90,9 @@ def apply_migrations():
     current = get_current_version(conn)
     if current < 3:
         migration_v3(conn)
+    current = get_current_version(conn)
+    if current < 4:
+        migration_v4(conn)
     conn.execute("DELETE FROM settings WHERE key NOT IN (?, ?, ?, ?)", ("scrape_delay_ms", "fetch_max_months", "fetch_max_days", "favorite_max_items"))
     conn.commit()
     conn.close()

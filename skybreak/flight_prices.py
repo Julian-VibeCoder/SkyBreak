@@ -4,10 +4,35 @@ from datetime import datetime
 logger = logging.getLogger(__name__)
 DB_PATH = os.environ.get("DB_FILE", "/data/skybreak.db")
 
-def fetch_prices_favorite(favorite_id):
-    """Preise für einen Favoriten via fast-flights abrufen und speichern."""
+def fetch_prices_favorite(favorite_id, force=False):
+    """Preise für einen Favoriten via fast-flights abrufen und speichern.
+    Nur neu abfragen, wenn letzter Preis länger als 12h alt (oder force=True)."""
     try:
         import fast_flights
+        conn = sqlite3.connect(DB_PATH, timeout=30.0)
+        # 12h-Schwelle prüfen
+        if not force:
+            row = conn.execute(
+                "SELECT fetched_at FROM favorite_trip_prices WHERE favorite_id = ? ORDER BY fetched_at DESC LIMIT 1",
+                (favorite_id,)).fetchone()
+            if row and row[0]:
+                fetched = row[0]
+                # SQLite TIMESTAMP kann als String zurückkommen
+                from datetime import datetime, timedelta
+                try:
+                    fetched_dt = datetime.fromisoformat(str(fetched).replace("Z", "+00:00"))
+                except Exception:
+                    fetched_dt = None
+                if fetched_dt:
+                    age_hours = (datetime.now(fetched_dt.tzinfo) - fetched_dt).total_seconds() / 3600
+                    # Falls fetched_dt kein tzinfo hat, verwende naive Vergleich mit now()
+                    if fetched_dt.tzinfo is None:
+                        age_hours = (datetime.now() - fetched_dt).total_seconds() / 3600
+                    if age_hours < 12:
+                        conn.close()
+                        logger.info("Favorit %s Preis %s h alt (<12h) – überspringen", favorite_id, round(age_hours, 1))
+                        return get_prices_for_favorite(favorite_id)
+        conn.close()
         conn = sqlite3.connect(DB_PATH, timeout=30.0)
         row = conn.execute(
             "SELECT trip_date, start_airport, destination_airport, outbound_trip_date, return_trip_date FROM favorite_trips WHERE id = ?",

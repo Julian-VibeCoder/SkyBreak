@@ -298,7 +298,7 @@ def update_prices():
             conn.close()
             for (fav_id,) in rows:
                 try:
-                    fetch_prices_favorite(fav_id)
+                    fetch_prices_favorite(fav_id, force=False)  # 12h-Schwelle
                 except Exception:
                     pass
         finally:
@@ -468,4 +468,6 @@ def find_short_trips():
 
 if __name__ == "__main__":
     apply_migrations()
+    from skybreak.scraper_job import start_price_scheduler
+    start_price_scheduler()
     app.run(host="0.0.0.0", port=80)
