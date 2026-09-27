@@ -118,6 +118,26 @@ def future_flights_info():
     result['_max_loaded_day'] = max_day.strftime('%Y-%m-%d') if max_day else None
     return jsonify(result)
 
+@app.route("/api/prices/history", methods=["GET"])
+def price_history():
+    favorite_id = request.args.get("trip_id") or request.args.get("favorite_id")
+    if not favorite_id:
+        return jsonify({"error": "missing trip_id"}), 400
+    try:
+        favorite_id = int(favorite_id)
+    except Exception:
+        return jsonify({"error": "invalid trip_id"}), 400
+    conn = sqlite3.connect(DB_PATH, timeout=30.0)
+    rows = conn.execute(
+    "SELECT date, price_outbound, price_return, price_total FROM price_history WHERE favorite_id = ? ORDER BY date ASC",
+    (favorite_id,)
+    ).fetchall()
+    conn.close()
+    return jsonify([
+    {"date": r[0], "outbound_price": r[1], "return_price": r[2], "total_price": r[3]}
+    for r in rows
+    ])
+
 
 @app.route("/api/flights/fetch-now", methods=["POST"])
 @app.route("/api/flights/fetch-now", methods=["POST"])
