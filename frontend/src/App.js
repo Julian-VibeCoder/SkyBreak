@@ -82,16 +82,16 @@ function FavoriteTripPrices() {
                 <div>Hin: <strong>{f.price_outbound != null ? f.price_outbound + ' €' : '—'}</strong></div>
                 <div>Rück: <strong>{f.price_return != null ? f.price_return + ' €' : '—'}</strong></div>
                 <div style={{ color: '#38bdf8', fontWeight: 700 }}>Gesamt: {f.price_total != null ? f.price_total + ' €' : '—'} {f.currency ? '('+f.currency+')' : ''}</div>
+                  <div style={{ color: '#94a3b8', fontSize: 9, marginTop: 2 }}>(aktualisiert: {f.updated_at ? f.updated_at.substring(0,16).replace('T',' ') : (f.timestamp ? f.timestamp.substring(0,16).replace('T',' ') : '—')})</div>
               </td>
               <td style={{ padding: 6, textAlign: 'right', verticalAlign: 'top' }}>
                 <button onClick={() => openChartFor(f.id)} style={{ padding: '4px 8px', borderRadius: 6, border: 'none', background: '#38bdf8', color: '#0f172a', fontSize: 11, fontWeight: 600, cursor: 'pointer', marginRight: 4 }}>Chart</button>
-                <button onClick={async () => { await fetch('/api/favorites/'+f.id, {method:'DELETE'}); load(); }} style={{ padding: '4px 8px', borderRadius: 6, border: 'none', background: '#ef4444', color: '#fff', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>Löschen</button>
+                <button onClick={async () => { await fetch('/api/favorites/'+f.id, {method:'DELETE'}); load(); }} style={{ padding: '4px 8px', borderRadius: 6, border: 'none', background: '#ef4444', color: '#fff', fontSize: 11, fontWeight: 600, cursor: 'pointer', marginTop: 6 }}>Löschen</button>
               </td>
             </tr>
           ))}
         </tbody>
       </table>
-      <div style={{padding:8,color:'#38bdf8',fontWeight:600}}>Preis-Chart verfügbar</div>
       <ChartModal open={chartOpen} onClose={() => setChartOpen(false)} data={chartData} />
     </div>
   );
