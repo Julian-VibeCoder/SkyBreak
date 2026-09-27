@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import CollapsibleSidebar from './components/CollapsibleSidebar';
 import Layout from './components/Layout';
+import ChartModal from './components/ChartModal';
 
 const NAV = [
   { key: 'trips', label: 'Trips', icon: '🧳' },
@@ -16,10 +17,23 @@ function FavoriteTripPrices() {
   const [progress, setProgress] = useState(false);
   const [sortKey, setSortKey] = useState('price_total');
   const [sortDir, setSortDir] = useState('desc');
+  const [chartOpen, setChartOpen] = useState(false);
+  const [chartData, setChartData] = useState(null);
   const load = () => { setLoading(true); fetch('/api/favorites').then(r => r.json()).then(d => { setPrices(Array.isArray(d) ? d : []); }).catch(() => setPrices([])).finally(() => setLoading(false)); };
   useEffect(() => { load(); const iv = setInterval(() => { fetch('/api/prices/status').then(r=>r.json()).then(s=>{if(s.running){setProgress(true);}else{setProgress(false);}}).catch(()=>{}); }, 1500); return () => clearInterval(iv); }, []);
   if (!prices.length) return <p style={{ color: '#94a3b8', fontSize: 13 }}>No favorites yet.</p>;
   const handleUpdate = () => { if (updating || progress) return; setUpdating(true); setProgress(true); fetch('/api/prices', {method:'POST'}).then(r => r.json()).then(d => { if(d.updated) { setTimeout(load, 800); } else { setProgress(false); } }).catch(() => setProgress(false)).finally(() => setUpdating(false)); };
+  const openChartFor = (tripId) => {
+    const trip = prices.find(p => p.id === tripId || p.id == tripId);
+    if (!trip) { setChartData([]); setChartOpen(true); return; }
+    // Build minimal array for ChartModal (expects array of points)
+    setChartOpen(true);
+    fetch(`/api/prices/history?trip_id=${tripId}`).then(r => r.json()).then(data => {
+      setChartData(Array.isArray(data) && data.length ? data : [{date: trip.trip_date || '-', outbound_price: trip.price_outbound || 0, return_price: trip.price_return || 0, total_price: trip.price_total || 0}]);
+    }).catch(() => {
+      setChartData([{date: trip.trip_date || '-', outbound_price: trip.price_outbound || 0, return_price: trip.price_return || 0, total_price: trip.price_total || 0}]);
+    });
+  };
   const sorted = [...prices].sort((a,b) => {
     let av = a[sortKey], bv = b[sortKey];
     if (av == null) av = -Infinity; if (bv == null) bv = -Infinity;
@@ -68,14 +82,17 @@ function FavoriteTripPrices() {
                 <div>Hin: <strong>{f.price_outbound != null ? f.price_outbound + ' €' : '—'}</strong></div>
                 <div>Rück: <strong>{f.price_return != null ? f.price_return + ' €' : '—'}</strong></div>
                 <div style={{ color: '#38bdf8', fontWeight: 700 }}>Gesamt: {f.price_total != null ? f.price_total + ' €' : '—'} {f.currency ? '('+f.currency+')' : ''}</div>
+                  <div style={{ color: '#94a3b8', fontSize: 9, marginTop: 2 }}>(aktualisiert: {f.fetched_at ? f.fetched_at.substring(0,16).replace('T',' ') : (f.fetched_at ? f.fetched_at.substring(0,16).replace('T',' ') : '—')})</div>
               </td>
               <td style={{ padding: 6, textAlign: 'right', verticalAlign: 'top' }}>
-                <button onClick={async () => { await fetch('/api/favorites/'+f.id, {method:'DELETE'}); load(); }} style={{ padding: '4px 8px', borderRadius: 6, border: 'none', background: '#ef4444', color: '#fff', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>Löschen</button>
+                <button onClick={() => openChartFor(f.id)} style={{ padding: '4px 8px', borderRadius: 6, border: 'none', background: '#38bdf8', color: '#0f172a', fontSize: 11, fontWeight: 600, cursor: 'pointer', marginRight: 4 }}>Chart</button>
+                <button onClick={async () => { await fetch('/api/favorites/'+f.id, {method:'DELETE'}); load(); }} style={{ padding: '4px 8px', borderRadius: 6, border: 'none', background: '#ef4444', color: '#fff', fontSize: 11, fontWeight: 600, cursor: 'pointer', marginTop: 6 }}>Löschen</button>
               </td>
             </tr>
           ))}
         </tbody>
       </table>
+      <ChartModal open={chartOpen} onClose={() => setChartOpen(false)} data={chartData} />
     </div>
   );
 }
