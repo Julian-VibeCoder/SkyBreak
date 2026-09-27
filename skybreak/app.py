@@ -193,7 +193,10 @@ def settings():
     if request.method == "POST":
         data = request.get_json(force=True)
         for k, v in data.items():
-            set_setting(str(k), str(v))
+            if k == "scrape_delay_ms":
+                set_setting("scrape_delay_ms", str(int(v) if v is not None else 500))
+            else:
+                set_setting(str(k), str(v))
         return jsonify({"updated": True})
     else:
         conn = sqlite3.connect(DB_PATH, timeout=30.0)

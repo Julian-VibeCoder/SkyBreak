@@ -567,14 +567,17 @@ export default function App() {
               <p style={{ color: '#94a3b8', fontSize: 14, marginBottom: 16 }}>Configure max fetch months and scrape delay.</p>
               <form onSubmit={async (e) => {
                 e.preventDefault();
-                const body = { fetch_max_months: document.getElementById('fetchMaxMonths')?.value || 7 };
+                const body = {
+                  fetch_max_months: document.getElementById('fetchMaxMonths')?.value || 7,
+                  scrape_delay_ms: document.getElementById('delayMs')?.value || '500'
+                };
                 const res = await fetch('/api/settings', {
                   method: 'POST',
                   headers: {'Content-Type':'application/json'},
                   body: JSON.stringify(body)
                 });
                 if (res.ok) {
-                  // saved silently
+                  alert('Einstellungen gespeichert');
                 } else {
                   alert('Failed to save');
                 }
@@ -586,28 +589,17 @@ export default function App() {
                     The parameter <code>fetch_max_months</code> controls how many months ahead flight data is fetched. It is globally shared between all airports.
                   </span>
                 </div>
+                <div style={{ marginTop: 20, borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: 16 }}>
+                  <h4 style={{ margin: '0 0 10px', fontSize: 15, fontWeight: 600, color: '#f8fafc' }}>Scrape Delay (ms)</h4>
+                  <p style={{ color: '#94a3b8', fontSize: 13, marginBottom: 10 }}>Delay between kayak requests in milliseconds.</p>
+                  <input id="delayMs" type="number" min="0" max="5000" defaultValue="500" placeholder="ms" style={{ padding: '8px 12px', borderRadius: 10, border: '1px solid rgba(255,255,255,0.15)', background: 'rgba(255,255,255,0.06)', color: '#f8fafc', fontSize: 14, width: 140 }} />
+                </div>
                 <button type="submit" style={{
                   marginTop: 8, padding: '10px 18px', borderRadius: 10, border: 'none',
                   background: 'linear-gradient(135deg, #38bdf8, #818cf8)',
                   color: '#0f172a', fontWeight: 700, fontSize: 15, cursor: 'pointer', alignSelf: 'flex-start'
                 }}>Speichern</button>
               </form>
-              <div style={{ marginTop: 20, borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: 16 }}>
-                <h4 style={{ margin: '0 0 10px', fontSize: 15, fontWeight: 600, color: '#f8fafc' }}>Scrape Delay (ms)</h4>
-                <p style={{ color: '#94a3b8', fontSize: 13, marginBottom: 10 }}>Delay between kayak requests in milliseconds.</p>
-                <form onSubmit={async (e) => {
-                  e.preventDefault();
-                  const ms = parseInt(document.getElementById('delayMs')?.value || '500');
-                  const res = await fetch('/api/settings/delay-ms', {
-                    method: 'POST', headers: {'Content-Type':'application/json'},
-                    body: JSON.stringify({ delay_ms: ms })
-                  });
-                  if (!res.ok) alert('Failed to save delay');
-                }} style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-                  <input id="delayMs" type="number" min="0" max="5000" defaultValue="500" placeholder="ms" style={{ padding: '8px 12px', borderRadius: 10, border: '1px solid rgba(255,255,255,0.15)', background: 'rgba(255,255,255,0.06)', color: '#f8fafc', fontSize: 14, width: 140 }} />
-                  <button type="submit" style={{ padding: '8px 16px', borderRadius: 10, border: 'none', background: 'linear-gradient(135deg, #38bdf8, #818cf8)', color: '#0f172a', fontWeight: 700, fontSize: 14, cursor: 'pointer' }}>Save</button>
-                </form>
-              </div>
             </section>
           )}
         </div>
