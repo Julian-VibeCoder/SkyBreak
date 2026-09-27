@@ -138,6 +138,17 @@ export default function App() {
   const [startWeekdays, setStartWeekdays] = useState([4]);
   const [endWeekdays, setEndWeekdays] = useState([6]);
   const [maxDepToDest, setMaxDepToDest] = useState('18:00');
+  const [settings, setSettings] = useState({ fetch_max_months: '1', scrape_delay_ms: '500' });
+  useEffect(() => {
+    if (tab === 'settings') {
+      fetch('/api/settings').then(r => r.json()).then(data => {
+        setSettings({
+          fetch_max_months: data.fetch_max_months || data.fetch_max_days || '1',
+          scrape_delay_ms: data.scrape_delay_ms || '500'
+        });
+      }).catch(() => {});
+    }
+  }, [tab]);
   const [minRetDep, setMinRetDep] = useState('10:00');
   const [maxTripDays, setMaxTripDays] = useState(5);
   const [minTripDays, setMinTripDays] = useState(1);
@@ -568,8 +579,8 @@ export default function App() {
               <form onSubmit={async (e) => {
                 e.preventDefault();
                 const body = {
-                  fetch_max_months: document.getElementById('fetchMaxMonths')?.value || 7,
-                  scrape_delay_ms: document.getElementById('delayMs')?.value || '500'
+                  fetch_max_months: settings.fetch_max_months || document.getElementById('fetchMaxMonths')?.value || 7,
+                  scrape_delay_ms: settings.scrape_delay_ms || document.getElementById('delayMs')?.value || '500'
                 };
                 const res = await fetch('/api/settings', {
                   method: 'POST',
@@ -578,13 +589,14 @@ export default function App() {
                 });
                 if (res.ok) {
                   alert('Einstellungen gespeichert');
+                  setSettings({ fetch_max_months: body.fetch_max_months, scrape_delay_ms: body.scrape_delay_ms });
                 } else {
                   alert('Failed to save');
                 }
               }} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                   <label htmlFor="fetchMaxMonths" style={{ fontSize: 13, fontWeight: 600, color: '#f8fafc' }}>Max Fetch Months (1-12)</label>
-                  <input id="fetchMaxMonths" type="number" min="1" max="12" defaultValue="1" placeholder="Months" style={{ padding: "10px 14px", borderRadius: 10, border: "1px solid rgba(255,255,255,0.15)", background: "rgba(255,255,255,0.06)", color: "#f8fafc", fontSize: 15, width: '100%', maxWidth: 420, outline: "none" }} />
+                  <input id="fetchMaxMonths" type="number" min="1" max="12" value={settings.fetch_max_months || '1'} onChange={e => setSettings(s => ({...s, fetch_max_months: e.target.value}))} placeholder="Months" style={{ padding: "10px 14px", borderRadius: 10, border: "1px solid rgba(255,255,255,0.15)", background: "rgba(255,255,255,0.06)", color: "#f8fafc", fontSize: 15, width: '100%', maxWidth: 420, outline: "none" }} />
                   <span style={{ fontSize: 12, color: '#94a3b8', lineHeight: 1.5, maxWidth: 360 }}>
                     The parameter <code>fetch_max_months</code> controls how many months ahead flight data is fetched. It is globally shared between all airports.
                   </span>
@@ -592,7 +604,7 @@ export default function App() {
                 <div style={{ marginTop: 20, borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: 16 }}>
                   <h4 style={{ margin: '0 0 10px', fontSize: 15, fontWeight: 600, color: '#f8fafc' }}>Scrape Delay (ms)</h4>
                   <p style={{ color: '#94a3b8', fontSize: 13, marginBottom: 10 }}>Delay between kayak requests in milliseconds.</p>
-                  <input id="delayMs" type="number" min="0" max="5000" defaultValue="500" placeholder="ms" style={{ padding: '8px 12px', borderRadius: 10, border: '1px solid rgba(255,255,255,0.15)', background: 'rgba(255,255,255,0.06)', color: '#f8fafc', fontSize: 14, width: 140 }} />
+                  <input id="delayMs" type="number" min="0" max="5000" value={settings.scrape_delay_ms || '500'} onChange={e => setSettings(s => ({...s, scrape_delay_ms: e.target.value}))} placeholder="ms" style={{ padding: '8px 12px', borderRadius: 10, border: '1px solid rgba(255,255,255,0.15)', background: 'rgba(255,255,255,0.06)', color: '#f8fafc', fontSize: 14, width: 140 }} />
                 </div>
                 <button type="submit" style={{
                   marginTop: 8, padding: '10px 18px', borderRadius: 10, border: 'none',
