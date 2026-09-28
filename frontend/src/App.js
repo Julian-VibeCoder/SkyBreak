@@ -20,9 +20,10 @@ function FavoriteTripPrices() {
   const [chartOpen, setChartOpen] = useState(false);
   const [chartData, setChartData] = useState(null);
   const load = () => { setLoading(true); fetch('/api/favorites').then(r => r.json()).then(d => { setPrices(Array.isArray(d) ? d : []); }).catch(() => setPrices([])).finally(() => setLoading(false)); };
-  useEffect(() => { load(); let prevRunning = false; const iv = setInterval(() => { fetch('/api/prices/status').then(r=>r.json()).then(s=>{ if(s.running){setProgress(true);}else{setProgress(false); if(prevRunning && !s.running){ load(); } } prevRunning = !!s.running; }).catch(()=>{}); }, 1500); return () => clearInterval(iv); }, []);
+  const [pollActive, setPollActive] = useState(true);
+  useEffect(() => { load(); let prevRunning = false; const iv = setInterval(() => { if (!pollActive) return; fetch('/api/prices/status').then(r=>r.json()).then(s=>{ if(s.running){setProgress(true); setPollActive(true);}else{setProgress(false); setPollActive(false); if(prevRunning && !s.running){ load(); } } prevRunning = !!s.running; }).catch(()=>{}); }, 1500); return () => clearInterval(iv); }, [pollActive]);
   if (!prices.length) return <p style={{ color: '#94a3b8', fontSize: 13 }}>No favorites yet.</p>;
-  const handleUpdate = () => { if (updating || progress) return; setUpdating(true); setProgress(true); fetch('/api/prices', {method:'POST'}).then(r => r.json()).then(d => { if(d.updated) { setTimeout(load, 800); } else { setProgress(false); } }).catch(() => setProgress(false)).finally(() => setUpdating(false)); };
+  const handleUpdate = () => { if (updating || progress) return; setUpdating(true); setProgress(true); setPollActive(true); fetch('/api/prices', {method:'POST'}).then(r => r.json()).then(d => { if(d.updated) { setTimeout(load, 800); } else { setProgress(false); setPollActive(false); } }).catch(() => { setProgress(false); setPollActive(false); }).finally(() => setUpdating(false)); };
   const openChartFor = (tripId) => {
     const trip = prices.find(p => p.id === tripId || p.id == tripId);
     if (!trip) { setChartData([]); setChartOpen(true); return; }
