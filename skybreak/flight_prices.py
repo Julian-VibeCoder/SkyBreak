@@ -51,7 +51,7 @@ def fetch_prices_favorite(favorite_id, force=False):
                     earliest_departure_hour=earliest_dep_hour,
                     latest_departure_hour=latest_dep_hour,
                 )
-                result_out = get_flights(q=q_out.pb(), trip="one-way", passengers=Passengers(adults=1), seat="economy", fetch_mode="common")
+                result_out = get_flights(q_out.pb(), trip="one-way", passengers=Passengers(adults=1), seat="economy", fetch_mode="common")
             else:
                 # Fallback: nur wenn FlightQuery nicht verfügbar
                 logger.warning("FlightQuery nicht verfügbar, Preisabfrage übersprungen")
@@ -96,7 +96,7 @@ def fetch_prices_favorite(favorite_id, force=False):
                     earliest_departure_hour=earliest_ret_hour,
                     latest_departure_hour=latest_ret_hour,
                 )
-                result_ret = get_flights(q=q_ret.pb(), trip="one-way", passengers=Passengers(adults=1), seat="economy", fetch_mode="common")
+                result_ret = get_flights(q_ret.pb(), trip="one-way", passengers=Passengers(adults=1), seat="economy", fetch_mode="common")
             else:
                 logger.warning("FlightQuery nicht verfügbar (Rückflug), Preisabfrage übersprungen")
                 result_ret = None
