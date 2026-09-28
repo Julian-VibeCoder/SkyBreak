@@ -57,14 +57,6 @@ def _get_exact_price(q: Query, dep_time=None):
 def fetch_prices_favorite(favorite_id, force=False):
     try:
         conn = sqlite3.connect(DB_PATH, timeout=30.0)
-        if not force:
-            row = conn.execute("SELECT fetched_at FROM favorite_trip_prices WHERE favorite_id = ? ORDER BY fetched_at DESC LIMIT 1", (favorite_id,)).fetchone()
-            if row and row[0]:
-                fetched_dt = datetime.fromisoformat(str(row[0]).replace("Z","+00:00")) if row[0] else None
-                if fetched_dt:
-                    age = (datetime.now(fetched_dt.tzinfo)-fetched_dt).total_seconds()/3600 if fetched_dt.tzinfo else (datetime.now()-fetched_dt).total_seconds()/3600
-                    if age < 12:
-                        conn.close(); return get_prices_for_favorite(favorite_id)
         row = conn.execute("SELECT trip_date, start_airport, destination_airport, outbound_trip_date, return_trip_date, return_time FROM favorite_trips WHERE id = ?", (favorite_id,)).fetchone()
         conn.close()
         if not row: return {"favorite_id":favorite_id,"error":"Favorit nicht gefunden"}

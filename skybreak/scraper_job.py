@@ -115,16 +115,6 @@ def scrape_all_airports():
         except Exception as e:
             logger.info("Kayak fetch failed %s: %s", airport, e)
 
-def start_scheduler():
-    from apscheduler.schedulers.background import BackgroundScheduler
-    try: interval = int(get_setting("fetch_interval_minutes") or "30")
-    except: interval = 30
-    if interval == 0: logger.info("Scheduler disabled"); return
-    interval = max(1, min(interval, 10080))
-    scheduler = BackgroundScheduler()
-    scheduler.add_job(scrape_all_airports, "interval", minutes=interval)
-    scheduler.start()
-
 def start_price_scheduler():
     from apscheduler.schedulers.background import BackgroundScheduler
     try: interval = int(get_setting("price_fetch_interval_hours") or "6")
@@ -137,7 +127,7 @@ def start_price_scheduler():
     logger.info("Preis-Scheduler gestartet: %d Minuten", interval)
 
 def scrape_favorite_prices():
-    """Preise aller favorisierten Trips abfragen, nur wenn letzter Preis >12h alt."""
+    """Preise aller favorisierten Trips abfragen."""
     try:
         conn = sqlite3.connect(DB_PATH, timeout=30.0)
         rows = conn.execute("SELECT id FROM favorite_trips").fetchall()
@@ -145,7 +135,7 @@ def scrape_favorite_prices():
         from skybreak.flight_prices import fetch_prices_favorite
         for (fav_id,) in rows:
             try:
-                fetch_prices_favorite(fav_id, force=False)  # 12h-Schwelle drin
+                fetch_prices_favorite(fav_id, force=True)
             except Exception as e:
                 logger.warning("Preis-Update Favorit %s fehlgeschlagen: %s", fav_id, e)
     except Exception as e:

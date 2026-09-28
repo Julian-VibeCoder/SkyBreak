@@ -375,7 +375,7 @@ def update_prices():
             conn.close()
             for (fav_id,) in rows:
                 try:
-                    fetch_prices_favorite(fav_id, force=False)  # 12h-Schwelle
+                    fetch_prices_favorite(fav_id, force=True)
                 except Exception:
                     pass
         finally:
