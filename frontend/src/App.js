@@ -583,15 +583,7 @@ export default function App() {
               background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)',
               borderRadius: 18, padding: 24, boxShadow: '0 10px 30px rgba(0,0,0,0.2)'
             }}>
-<<<<<<< HEAD
-              <h3 style={{ margin: '0 0 14px', fontSize: 18, fontWeight: 700, color: '#f8fafc' }}>Cost Overview</h3>
-              <div style={{ marginTop: 10, padding: 12, background: 'rgba(255,255,255,0.06)', borderRadius: 10, border: '1px solid rgba(255,255,255,0.1)' }}>
-                <h4 style={{ color: '#f8fafc', fontSize: 14, marginBottom: 8, marginTop: 0 }}>Favorite Trips</h4>
-                <FavoriteTripPrices />
-              </div>
-=======
               <FavoriteTripPrices />
->>>>>>> fix/favorite-prices-layout
             </section>
           )}
 
