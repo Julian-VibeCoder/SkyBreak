@@ -169,7 +169,7 @@ export default function App() {
       params.append('max_trip_days', maxTripDays);
       fetch('/api/turnarounds?' + params.toString()).then(r => r.json()).then(data => setTurnarounds(data.turnarounds || data.results || [])).catch(() => setTurnarounds([]));
     }
-  }, [tab, tripStart, tripEnd, startWeekdays, endWeekdays, maxDepToDest, minRetDep, startAirport, endAirport, maxTripDays]);
+  }, [tab, tripStart, tripEnd, startWeekdays, endWeekdays, maxDepToDest, minRetDep, startAirport, endAirport, maxTripDays, minTripDays]);
 
   useEffect(() => {
     if (tab === 'flights') loadFlights();
@@ -453,6 +453,13 @@ export default function App() {
               <p style={{ color: '#94a3b8', fontSize: 14, marginBottom: 18 }}>Find possible trip combinations based on date ranges and weekday preferences.</p>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 18, marginBottom: 18 }}>
                 <div style={{ background: 'rgba(255,255,255,0.03)', borderRadius: 14, padding: 16, border: '1px solid rgba(255,255,255,0.06)' }}>
+                  <label style={{ fontSize: 12, fontWeight: 600, color: '#f8fafc', display: 'block', marginBottom: 6 }}>Airport (Start & End)</label>
+                  <select value={startAirport} onChange={e => { setStartAirport(e.target.value); setEndAirport(e.target.value); }} style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.15)', background: 'rgba(255,255,255,0.06)', color: '#f8fafc', fontSize: 13, maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    <option value="">Select airport</option>
+                    {list.map(c => <option key={c} value={c} style={{ color: '#0f172a', background: '#f8fafc' }}>{c}{airportNames[c] ? ' — ' + airportNames[c] : ''}</option>)}
+                  </select>
+                </div>
+                <div style={{ background: 'rgba(255,255,255,0.03)', borderRadius: 14, padding: 16, border: '1px solid rgba(255,255,255,0.06)' }}>
                   <label style={{ fontSize: 12, fontWeight: 600, color: '#f8fafc', display: 'block', marginBottom: 6 }}>Trip Start Date</label>
                   <input type="date" value={tripStart} onChange={e => setTripStart(e.target.value)} style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.15)', background: 'rgba(255,255,255,0.06)', color: '#f8fafc', fontSize: 14, boxSizing: 'border-box', maxWidth: '100%' }} />
                 </div>
@@ -487,13 +494,6 @@ export default function App() {
                 <div style={{ background: 'rgba(255,255,255,0.03)', borderRadius: 14, padding: 16, border: '1px solid rgba(255,255,255,0.06)' }}>
                   <label style={{ fontSize: 12, fontWeight: 600, color: '#f8fafc', display: 'block', marginBottom: 6 }}>Latest Departure to Destination</label>
                   <input type="time" value={maxDepToDest} onChange={e => setMaxDepToDest(e.target.value)} style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.15)', background: 'rgba(255,255,255,0.06)', color: '#f8fafc', fontSize: 14, boxSizing: 'border-box', maxWidth: '100%' }} />
-                </div>
-                <div style={{ background: 'rgba(255,255,255,0.03)', borderRadius: 14, padding: 16, border: '1px solid rgba(255,255,255,0.06)' }}>
-                  <label style={{ fontSize: 12, fontWeight: 600, color: '#f8fafc', display: 'block', marginBottom: 6 }}>Airport (Start & End)</label>
-                  <select value={startAirport} onChange={e => { setStartAirport(e.target.value); setEndAirport(e.target.value); }} style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.15)', background: 'rgba(255,255,255,0.06)', color: '#f8fafc', fontSize: 13, maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                    <option value="">Select airport</option>
-                    {list.map(c => <option key={c} value={c} style={{ color: '#0f172a', background: '#f8fafc' }}>{c}{airportNames[c] ? ' — ' + airportNames[c] : ''}</option>)}
-                  </select>
                 </div>
                 <div style={{ background: 'rgba(255,255,255,0.03)', borderRadius: 14, padding: 16, border: '1px solid rgba(255,255,255,0.06)' }}>
                   <label style={{ fontSize: 12, fontWeight: 600, color: '#f8fafc', display: 'block', marginBottom: 6 }}>Earliest Return Departure</label>
