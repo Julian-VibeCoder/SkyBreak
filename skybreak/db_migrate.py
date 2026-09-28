@@ -79,6 +79,20 @@ def migration_v4(conn):
     conn.execute("INSERT INTO db_version (version) VALUES (4)")
     logger.info("Applied migration v4")
 
+def migration_v5(conn):
+    # Ensure separate Hin-/Rückflug-Daten existieren (nach v3)
+    try:
+        cols = {r[1] for r in conn.execute("PRAGMA table_info(favorite_trips)").fetchall()}
+    except:
+        cols = set()
+    if 'outbound_trip_date' not in cols:
+        conn.execute("ALTER TABLE favorite_trips ADD COLUMN outbound_trip_date TEXT")
+    if 'return_trip_date' not in cols:
+        conn.execute("ALTER TABLE favorite_trips ADD COLUMN return_trip_date TEXT")
+    conn.execute("DELETE FROM db_version")
+    conn.execute("INSERT INTO db_version (version) VALUES (5)")
+    logger.info("Applied migration v5")
+
 def apply_migrations():
     conn = sqlite3.connect(DB_FILE, timeout=30.0)
     current = get_current_version(conn)
@@ -93,7 +107,11 @@ def apply_migrations():
     current = get_current_version(conn)
     if current < 4:
         migration_v4(conn)
-    conn.execute("DELETE FROM settings WHERE key NOT IN (?, ?, ?, ?)", ("scrape_delay_ms", "fetch_max_months", "fetch_max_days", "favorite_max_items"))
+    current = get_current_version(conn)
+    if current < 5:
+        migration_v5(conn)
+    conn.execute("DELETE FROM settings WHERE key NOT IN (?, ?, ?, ?, ?)", ("scrape_delay_ms", "fetch_max_months", "fetch_max_days", "favorite_max_items", "google_consent_cookie"))
+    conn.execute("INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)", ("google_consent_cookie", "CAESHAgBEhJnd3NfMjAyMzA4MTAtMF9SQzIaAmRlIAEaBgiAo_CmBg"))
     conn.commit()
     conn.close()
     logger.info("DB at version %d", get_current_version(sqlite3.connect(DB_FILE, timeout=30.0)))
