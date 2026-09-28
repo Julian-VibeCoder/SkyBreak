@@ -77,7 +77,7 @@ function FavoriteTripPrices() {
               </button>
               {isOpen && (
                 <div style={{ padding: 8 }}>
-                  <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: '0 4px', fontSize: 12, tableLayout: 'fixed' }}>
+                  <table style={{ width: '100%', minWidth: '720px', borderCollapse: 'separate', borderSpacing: '0 4px', fontSize: 12, tableLayout: 'fixed' }}>
                     <thead><tr style={{ borderBottom: '1px solid rgba(255,255,255,0.12)' }}>
                       <th style={{ textAlign: 'left', padding: '6px 8px', color: '#94a3b8', whiteSpace: 'nowrap', width: '18%' }}>Origin</th>
                       <th style={{ textAlign: 'left', padding: '6px 8px', color: '#94a3b8', whiteSpace: 'nowrap', width: '22%' }}>Outbound</th>
@@ -148,6 +148,7 @@ function FavoriteTrips() {
 
 export default function App() {
   const [tab, setTab] = useState('trips');
+  const [mobileNavHidden, setMobileNavHidden] = useState(false);
   const [code, setCode] = useState('');
   const [list, setList] = useState([]);
   const [feedback, setFeedback] = useState('');
@@ -289,7 +290,7 @@ export default function App() {
       display: 'flex', flexDirection: 'row', minHeight: '100dvh', fontFamily: "'Inter', 'Segoe UI', system-ui, sans-serif",
       background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)', color: '#f1f5f9'
     }}>
-      <CollapsibleSidebar><aside style={{
+        <CollapsibleSidebar collapsed={mobileNavHidden} onToggle={() => setMobileNavHidden(c => !c)}><aside style={{
         width: 220, flexShrink: 0, background: 'rgba(15,23,42,0.85)',
         backdropFilter: 'blur(12px)', borderRight: '1px solid rgba(255,255,255,0.06)',
         padding: '18px 14px', display: 'flex', flexDirection: 'column', gap: 10,
@@ -310,7 +311,7 @@ export default function App() {
 
         <nav style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           {NAV.map(n => (
-            <a key={n.key} href={'/' + n.key} onClick={(e) => { if (e.ctrlKey || e.metaKey || e.button === 1) return; e.preventDefault(); setTab(n.key); window.history.pushState({}, '', '/' + n.key); }} style={{ textDecoration: 'none', color: 'inherit', display: 'block', width: '100%' }}>
+            <a key={n.key} href={'/' + n.key} onClick={(e) => { if (e.ctrlKey || e.metaKey || e.button === 1) return; e.preventDefault(); setTab(n.key); setMobileNavHidden(true); window.history.pushState({}, '', '/' + n.key); }} style={{ textDecoration: 'none', color: 'inherit', display: 'block', width: '100%' }}>
               <button style={{
                 width: '100%', textAlign: 'left', padding: '12px 14px', borderRadius: 12, border: 'none',
                 background: tab === n.key ? 'rgba(56,189,248,0.15)' : 'transparent',
@@ -349,7 +350,7 @@ export default function App() {
           </div>
         </header>
 
-        <div style={{ display: 'grid', gap: 24, gridTemplateColumns: tab === 'airports' ? '1fr 1fr' : '1fr', alignItems: 'start' }}>
+        <div style={{ display: 'grid', gap: 24, gridTemplateColumns: '1fr', alignItems: 'start' }}>
           {tab === 'airports' && (
             <>
               <section style={{
@@ -473,7 +474,7 @@ export default function App() {
             }}>
               <h3 style={{ margin: '0 0 14px', fontSize: 18, fontWeight: 700, color: '#f8fafc' }}>Trip Turnaround Finder</h3>
               <p style={{ color: '#94a3b8', fontSize: 14, marginBottom: 18 }}>Find possible trip combinations based on date ranges and weekday preferences.</p>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 18, marginBottom: 18 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 18, marginBottom: 18 }}>
                 <div style={{ background: 'rgba(255,255,255,0.03)', borderRadius: 14, padding: 16, border: '1px solid rgba(255,255,255,0.06)' }}>
                   <label style={{ fontSize: 12, fontWeight: 600, color: '#f8fafc', display: 'block', marginBottom: 6 }}>Airport (Start & End)</label>
                   <select value={startAirport} onChange={e => { setStartAirport(e.target.value); setEndAirport(e.target.value); }} style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.15)', background: 'rgba(255,255,255,0.06)', color: '#f8fafc', fontSize: 13, maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis' }}>
