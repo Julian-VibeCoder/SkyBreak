@@ -20,7 +20,7 @@ function FavoriteTripPrices() {
   const [chartOpen, setChartOpen] = useState(false);
   const [chartData, setChartData] = useState(null);
   const load = () => { setLoading(true); fetch('/api/favorites').then(r => r.json()).then(d => { setPrices(Array.isArray(d) ? d : []); }).catch(() => setPrices([])).finally(() => setLoading(false)); };
-  useEffect(() => { load(); const iv = setInterval(() => { fetch('/api/prices/status').then(r=>r.json()).then(s=>{if(s.running){setProgress(true);}else{setProgress(false);}}).catch(()=>{}); }, 1500); return () => clearInterval(iv); }, []);
+  useEffect(() => { load(); let prevRunning = false; const iv = setInterval(() => { fetch('/api/prices/status').then(r=>r.json()).then(s=>{ if(s.running){setProgress(true);}else{setProgress(false); if(prevRunning && !s.running){ load(); } } prevRunning = !!s.running; }).catch(()=>{}); }, 1500); return () => clearInterval(iv); }, []);
   if (!prices.length) return <p style={{ color: '#94a3b8', fontSize: 13 }}>No favorites yet.</p>;
   const handleUpdate = () => { if (updating || progress) return; setUpdating(true); setProgress(true); fetch('/api/prices', {method:'POST'}).then(r => r.json()).then(d => { if(d.updated) { setTimeout(load, 800); } else { setProgress(false); } }).catch(() => setProgress(false)).finally(() => setUpdating(false)); };
   const openChartFor = (tripId) => {
@@ -138,13 +138,14 @@ export default function App() {
   const [startWeekdays, setStartWeekdays] = useState([4]);
   const [endWeekdays, setEndWeekdays] = useState([6]);
   const [maxDepToDest, setMaxDepToDest] = useState('18:00');
-  const [settings, setSettings] = useState({ fetch_max_months: '1', scrape_delay_ms: '500' });
+  const [settings, setSettings] = useState({ fetch_max_months: '1', scrape_delay_ms: '500', google_consent_cookie: 'CAESHAgBEhJnd3NfMjAyMzA4MTAtMF9SQzIaAmRlIAEaBgiAo_CmBg' });
   useEffect(() => {
     if (tab === 'settings') {
       fetch('/api/settings').then(r => r.json()).then(data => {
         setSettings({
           fetch_max_months: data.fetch_max_months || data.fetch_max_days || '1',
-          scrape_delay_ms: data.scrape_delay_ms || '500'
+          scrape_delay_ms: data.scrape_delay_ms || '500',
+          google_consent_cookie: data.google_consent_cookie || 'CAESHAgBEhJnd3NfMjAyMzA4MTAtMF9SQzIaAmRlIAEaBgiAo_CmBg'
         });
       }).catch(() => {});
     }
@@ -174,6 +175,7 @@ export default function App() {
   useEffect(() => {
     if (tab === 'flights') loadFlights();
   }, [flightDate, tab]);
+  useEffect(() => { if (tab !== 'prices') return; let prevRunning = false; const iv = setInterval(() => { fetch('/api/prices/status').then(r=>r.json()).then(s=>{ if(s.running){ } else { if(prevRunning && !s.running){ window.dispatchEvent(new Event('price-update')); } } prevRunning = !!s.running; }).catch(()=>{}); }, 1500); return () => clearInterval(iv); }, [tab]);
   useEffect(() => {
     if (tab === 'flights') loadFlights();
           fetch('/api/airports').then(r => r.json()).then(data => {
@@ -377,17 +379,12 @@ export default function App() {
 <h3 style={{ margin: '0 0 14px', fontSize: 18, fontWeight: 700, color: '#f8fafc' }}>Flight Schedule</h3>
               <div style={{ display: 'flex', gap: 10, marginBottom: 16, flexWrap: 'wrap', alignItems: 'center' }}>
                 <input type='date' value={flightDate} onChange={e => { setFlightDate(e.target.value); loadFlights(); }} style={{ padding: '10px 14px', borderRadius: 10, border: '1px solid rgba(255,255,255,0.15)', background: 'rgba(255,255,255,0.06)', color: '#f8fafc', fontSize: 15 }} />
-                <button onClick={() => setFlightDate(new Date(new Date(flightDate).getTime() - 86400000).toISOString().split('T')[0])} style={{ padding: '10px 14px', borderRadius: 10, border: 'none', background: 'linear-gradient(135deg,#6366f1,#4f46e5)', color: '#fff', fontWeight: 700, cursor: 'pointer', fontSize: 13 }}>◀ Vorheriger Tag</button>
-                <button onClick={() => setFlightDate(new Date().toISOString().split('T')[0])} style={{ padding: '10px 14px', borderRadius: 10, border: 'none', background: 'linear-gradient(135deg,#f59e0b,#d97706)', color: '#fff', fontWeight: 700, cursor: 'pointer', fontSize: 13 }}>Heute</button>
+                <button onClick={() => setFlightDate(new Date(new Date(flightDate).getTime() - 86400000).toISOString().split('T')[0])} style={{ padding: '10px 14px', borderRadius: 10, border: 'none', background: 'linear-gradient(135deg,#6366f1,#4f46e5)', color: '#fff', fontWeight: 700, cursor: 'pointer', fontSize: 13 }}>◀ Previous Day</button>
+                <button onClick={() => setFlightDate(new Date().toISOString().split('T')[0])} style={{ padding: '10px 14px', borderRadius: 10, border: 'none', background: 'linear-gradient(135deg,#f59e0b,#d97706)', color: '#fff', fontWeight: 700, cursor: 'pointer', fontSize: 13 }}>Today</button>
                 <button onClick={() => setFlightDate(new Date(new Date(flightDate).getTime() + 86400000).toISOString().split('T')[0])} style={{ padding: '10px 14px', borderRadius: 10, border: 'none', background: 'linear-gradient(135deg,#6366f1,#4f46e5)', color: '#fff', fontWeight: 700, cursor: 'pointer', fontSize: 13 }}>Next Day ▶</button>
-                <button onClick={() => fetch('/api/flights/fetch-now', {method:'POST'}).then(r => alert('Fetch started'))} style={{padding:'6px 12px', borderRadius:8, border:'none', background:'#10b981', color:'#fff', fontWeight:700, cursor:'pointer', fontSize:13}}>Fetch Now</button>
+                <button disabled={scrapeRunning} onClick={() => fetch('/api/flights/fetch-now', {method:'POST'}).then(r => alert('Fetch started'))} style={{padding:'10px 14px', borderRadius:10, border:'none', background:scrapeRunning ? '#475569' : '#10b981', color:'#fff', fontWeight:700, cursor:scrapeRunning ? 'not-allowed' : 'pointer', fontSize:13}}> {scrapeRunning ? 'Fetching...' : 'Fetch Now'} </button>
                 
-                {scrapeRunning && (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 12px', borderRadius: 8, background: 'rgba(16,185,129,0.15)', border: '1px solid rgba(16,185,129,0.35)' }}>
-                    <div style={{ width: 16, height: 4, borderRadius: 2, background: 'linear-gradient(90deg,#10b981,#34d399,#10b981)', animation: 'pulse 1.5s infinite', backgroundSize: '200% 100%' }} />
-                    <span style={{ fontSize: 12, color: '#34d399', fontWeight: 600 }}>Scraping läuft…</span>
-                  </div>
-                )}
+
               </div>
               {list.map(airport => {
                 const arr = flights.filter(f => f.airport_icao === airport && f.direction === 'arrival');
@@ -580,7 +577,8 @@ export default function App() {
                 e.preventDefault();
                 const body = {
                   fetch_max_months: settings.fetch_max_months || document.getElementById('fetchMaxMonths')?.value || 7,
-                  scrape_delay_ms: settings.scrape_delay_ms || document.getElementById('delayMs')?.value || '500'
+                  scrape_delay_ms: settings.scrape_delay_ms || document.getElementById('delayMs')?.value || '500',
+                  google_consent_cookie: settings.google_consent_cookie || document.getElementById('consentCookie')?.value || 'CAESHAgBEhJnd3NfMjAyMzA4MTAtMF9SQzIaAmRlIAEaBgiAo_CmBg'
                 };
                 const res = await fetch('/api/settings', {
                   method: 'POST',
@@ -589,7 +587,7 @@ export default function App() {
                 });
                 if (res.ok) {
                   alert('Settings saved');
-                  setSettings({ fetch_max_months: body.fetch_max_months, scrape_delay_ms: body.scrape_delay_ms });
+                  setSettings({ fetch_max_months: body.fetch_max_months, scrape_delay_ms: body.scrape_delay_ms, google_consent_cookie: body.google_consent_cookie });
                 } else {
                   alert('Failed to save');
                 }
@@ -606,7 +604,12 @@ export default function App() {
                   <p style={{ color: '#94a3b8', fontSize: 13, marginBottom: 10 }}>Delay between kayak requests in milliseconds.</p>
                   <input id="delayMs" type="number" min="0" max="5000" value={settings.scrape_delay_ms || '500'} onChange={e => setSettings(s => ({...s, scrape_delay_ms: e.target.value}))} placeholder="ms" style={{ padding: '8px 12px', borderRadius: 10, border: '1px solid rgba(255,255,255,0.15)', background: 'rgba(255,255,255,0.06)', color: '#f8fafc', fontSize: 14, width: 140 }} />
                 </div>
-                <button type="submit" style={{
+                                  <div style={{ marginTop: 20, borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: 16 }}>
+                    <h4 style={{ margin: '0 0 10px', fontSize: 15, fontWeight: 600, color: '#f8fafc' }}>Google Consent Cookie (SOCS)</h4>
+                    <p style={{ color: '#94a3b8', fontSize: 13, marginBottom: 10 }}>Cookie-Wert für EU-Consent (Alle ablehnen).</p>
+                    <input id="consentCookie" type="text" value={settings.google_consent_cookie || 'CAESHAgBEhJnd3NfMjAyMzA4MTAtMF9SQzIaAmRlIAEaBgiAo_CmBg'} onChange={e => setSettings(s => ({...s, google_consent_cookie: e.target.value}))} placeholder="SOCS Cookie Wert" style={{ padding: '8px 12px', borderRadius: 10, border: '1px solid rgba(255,255,255,0.15)', background: 'rgba(255,255,255,0.06)', color: '#f8fafc', fontSize: 14, width: '100%', maxWidth: 520, outline: 'none' }} />
+                  </div>
+                  <button type="submit" style={{
                   marginTop: 8, padding: '10px 18px', borderRadius: 10, border: 'none',
                   background: 'linear-gradient(135deg, #38bdf8, #818cf8)',
                   color: '#0f172a', fontWeight: 700, fontSize: 15, cursor: 'pointer', alignSelf: 'flex-start'
