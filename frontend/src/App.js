@@ -59,7 +59,6 @@ function FavoriteTripPrices() {
 
   return (
     <div>
-      <div style={{ background: 'rgba(255,255,255,0.03)', borderRadius: 16, padding: 16, border: '1px solid rgba(255,255,255,0.08)', boxShadow: '0 4px 20px rgba(0,0,0,0.25)' }}>
         <h4 style={{ margin: '0 0 10px', fontSize: 16, fontWeight: 700, color: '#f8fafc', letterSpacing: 0.2 }}>Favorite Trips</h4>
         <button disabled={updating || progress} onClick={handleUpdate} style={{ padding: '6px 10px', borderRadius: 6, border: 'none', background: (updating || progress) ? '#475569' : '#38bdf8', color: '#0f172a', fontWeight: 700, fontSize: 12, cursor: (updating || progress) ? 'not-allowed' : 'pointer', marginBottom: 8 }}>
           {progress || updating ? 'Updating prices... (running)' : 'Update prices'}
@@ -117,7 +116,6 @@ function FavoriteTripPrices() {
             </div>
           );
         })}
-      </div>
       <ChartModal open={chartOpen} onClose={() => setChartOpen(false)} data={chartData} />
     </div>
   );
@@ -585,11 +583,15 @@ export default function App() {
               background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)',
               borderRadius: 18, padding: 24, boxShadow: '0 10px 30px rgba(0,0,0,0.2)'
             }}>
+<<<<<<< HEAD
               <h3 style={{ margin: '0 0 14px', fontSize: 18, fontWeight: 700, color: '#f8fafc' }}>Cost Overview</h3>
               <div style={{ marginTop: 10, padding: 12, background: 'rgba(255,255,255,0.06)', borderRadius: 10, border: '1px solid rgba(255,255,255,0.1)' }}>
                 <h4 style={{ color: '#f8fafc', fontSize: 14, marginBottom: 8, marginTop: 0 }}>Favorite Trips</h4>
                 <FavoriteTripPrices />
               </div>
+=======
+              <FavoriteTripPrices />
+>>>>>>> fix/favorite-prices-layout
             </section>
           )}
 
