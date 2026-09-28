@@ -2,6 +2,32 @@ import logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 from flask import Flask, request, jsonify, send_from_directory
 from skybreak.airport_lookup import fetch_airport_name, fetch_city_country
+_airport_lookup_cache = {}
+_city_lookup_cache = {}
+# Preload airport names/countries for speed
+try:
+    import sqlite3, os
+    _tmp_db = sqlite3.connect(os.environ.get('DB_FILE', '/data/skybreak.db'), timeout=5.0)
+    for row in _tmp_db.execute('SELECT code, name FROM airports').fetchall():
+        _airport_lookup_cache[row[0]] = row[1] or row[0]
+    _tmp_db.close()
+except Exception:
+    pass
+# Cache wrappers defined below
+# Cache for airport lookups (Option 1 + 3)
+_airport_lookup_cache = {}
+_city_lookup_cache = {}
+# Preload airport names/countries for speed
+try:
+    import sqlite3, os
+    _tmp_db = sqlite3.connect(os.environ.get('DB_FILE', '/data/skybreak.db'), timeout=5.0)
+    for row in _tmp_db.execute('SELECT code, name FROM airports').fetchall():
+        _airport_lookup_cache[row[0]] = row[1] or row[0]
+    _tmp_db.close()
+except Exception:
+    pass
+import airportsdata
+_AIRPORTS = airportsdata.load('IATA')
 from skybreak.airport import add_airport, delete_airport, validate_iata
 import sqlite3
 import threading
@@ -13,6 +39,18 @@ FRONTEND_BUILD_DIR = os.environ.get("FRONTEND_BUILD_DIR", "/app/frontend/build")
 DB_PATH = os.environ.get("DB_FILE", "/data/skybreak.db")
 
 app = Flask(__name__, static_folder=os.path.join(FRONTEND_BUILD_DIR, "static"), static_url_path="/static")
+
+
+# Cached wrappers (Option 1 + 3)
+def _cached_fetch_airport_name(code):
+    if code not in _airport_lookup_cache:
+        _airport_lookup_cache[code] = fetch_airport_name(code)
+    return _airport_lookup_cache[code]
+
+def _cached_fetch_city_country(code):
+    if code not in _city_lookup_cache:
+        _city_lookup_cache[code] = fetch_city_country(code)
+    return _city_lookup_cache[code]
 
 _scrape_lock = threading.Lock()
 _scrape_in_progress = False
@@ -69,8 +107,8 @@ def list_flights():
     for r in rows:
         airport_icao = r[0]
         destination_icao = r[2]
-        airport_name = fetch_airport_name(airport_icao) or r[1] or ""
-        destination_name = fetch_airport_name(destination_icao) or r[3] or ""
+        airport_name = _cached_fetch_airport_name(airport_icao) or r[1] or ""
+        destination_name = _cached_fetch_airport_name(destination_icao) or r[3] or ""
         result.append({
             "airport_icao": airport_icao,
             "airport_name": airport_name,
@@ -78,7 +116,7 @@ def list_flights():
             "destination_name": destination_name,
             "direction": r[4],
             "from_icao": destination_icao if r[4] == 'arrival' else airport_icao,
-            "from_airport_name": (fetch_airport_name(destination_icao) or r[3] or "") if r[4] == 'arrival' else airport_name,
+            "from_airport_name": (_cached_fetch_airport_name(destination_icao) or r[3] or "") if r[4] == 'arrival' else airport_name,
             "to_icao": airport_icao if r[4] == 'arrival' else destination_icao,
             "to_airport_name": airport_name if r[4] == 'arrival' else destination_name,
             "departure_time": r[5] + ("Z" if r[5] and not r[5].endswith("Z") and "+" not in r[5][-6:] else ""),
@@ -218,6 +256,8 @@ def create_favorite():
     conn.close()
     return jsonify({"created": True}), 201
 
+
+# Batch helper (weiter optimieren)
 @app.route("/api/favorites", methods=["GET"])
 def list_favorites():
     conn = sqlite3.connect(DB_PATH, timeout=30.0)
@@ -254,18 +294,16 @@ def list_favorites():
                     ret_dep = row_ret[3]; ret_arr = row_ret[4]; ret_flight = row_ret[2]
         finally:
             conn2.close()
-        start_city_country = fetch_city_country(start_airport)
-        dest_city_country = fetch_city_country(dest_airport)
+        start_city_country = _cached_fetch_city_country(start_airport)
+        dest_city_country = _cached_fetch_city_country(dest_airport)
         # Dauer berechnen (Hinflug) mit Zeitzonen
         duration_out = None
         if out_dep and out_arr:
             try:
                 from datetime import datetime, timedelta
                 from zoneinfo import ZoneInfo
-                import airportsdata
-                AIRPORTS = airportsdata.load("IATA")
                 def tz_for(code):
-                    a = AIRPORTS.get(code)
+                    a = _AIRPORTS.get(code)
                     return ZoneInfo(a["tz"]) if a and a.get("tz") else None
                 dep_str = str(out_dep)
                 arr_str = str(out_arr)
@@ -301,10 +339,8 @@ def list_favorites():
             try:
                 from datetime import datetime, timedelta
                 from zoneinfo import ZoneInfo
-                import airportsdata
-                AIRPORTS = airportsdata.load("IATA")
                 def tz_for(code):
-                    a = AIRPORTS.get(code)
+                    a = _AIRPORTS.get(code)
                     return ZoneInfo(a["tz"]) if a and a.get("tz") else None
                 # Rückflug: Start = dest_airport, Ziel = start_airport
                 dep_str = str(ret_dep)
@@ -329,8 +365,8 @@ def list_favorites():
                     duration_ret = int(round((d2 - d1).total_seconds() / 60))
             except Exception:
                 pass
-        start_name = fetch_airport_name(start_airport) or start_airport or ""
-        dest_name = fetch_airport_name(dest_airport) or dest_airport or ""
+        start_name = _cached_fetch_airport_name(start_airport) or start_airport or ""
+        dest_name = _cached_fetch_airport_name(dest_airport) or dest_airport or ""
         result.append({"id": r[0], "trip_date": r[1], "start_time": r[2], "destination_airport": r[3],
                        "outbound_flight_number": r[4], "return_flight_number": r[5], "start_airport": r[6], "created_at": r[7],
                                                 "outbound_trip_date": r[8], "return_trip_date": r[9], "return_time": r[10],
@@ -509,11 +545,11 @@ def find_short_trips():
                 "hinflug_id": hin[0],
                 "hinflug_ziel": ziel,
                 "hinflug_flight_number": hin[2] or "",
-                "hinflug_ziel_name": fetch_airport_name(ziel) or ziel,
+                "hinflug_ziel_name": _cached_fetch_airport_name(ziel) or ziel,
                 "hinflug_abflug_zeit": hin[3],
                 "rueckflug_id": rueck["id"],
                 "rueckflug_start": rueck["start_flughafen"],
-                "rueckflug_start_name": fetch_airport_name(rueck["start_flughafen"]) or rueck["start_flughafen"],
+                "rueckflug_start_name": _cached_fetch_airport_name(rueck["start_flughafen"]) or rueck["start_flughafen"],
                 "rueckflug_abflug_zeit": rueck["abflug_zeit"],
                 "rueckflug_flight_number": rueck.get("flight_number") or "",
                 "dauer_tage": round(dauer_stunden / 24.0, 2)
@@ -548,3 +584,5 @@ if __name__ == "__main__":
     from skybreak.scraper_job import start_price_scheduler
     start_price_scheduler()
     app.run(host="0.0.0.0", port=80)
+
+# Batch restructuring implemented

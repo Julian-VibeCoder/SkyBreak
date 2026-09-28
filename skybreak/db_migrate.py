@@ -105,8 +105,14 @@ def migration_v6(conn):
     logger.info("Applied migration v6")
 
 def migration_v7(conn):
-    # Prevent duplicate favorites via unique index
-    conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_favorite_unique ON favorite_trips (trip_date, start_time, destination_airport, outbound_flight_number, return_flight_number, start_airport, outbound_trip_date, return_trip_date, return_time)")
+    # Prevent duplicate favorites via unique index (only if all columns present)
+    try:
+        cols = {r[1] for r in conn.execute("PRAGMA table_info(favorite_trips)").fetchall()}
+        needed = ['trip_date','start_time','destination_airport','outbound_flight_number','return_flight_number','start_airport','outbound_trip_date','return_trip_date','return_time']
+        if all(c in cols for c in needed):
+            conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_favorite_unique ON favorite_trips (trip_date, start_time, destination_airport, outbound_flight_number, return_flight_number, start_airport, outbound_trip_date, return_trip_date, return_time)")
+    except Exception:
+        pass
     conn.execute("DELETE FROM db_version")
     conn.execute("INSERT INTO db_version (version) VALUES (7)")
     logger.info("Applied migration v7")
@@ -128,6 +134,13 @@ def migration_v9(conn):
     conn.execute("DELETE FROM db_version")
     conn.execute("INSERT INTO db_version (version) VALUES (9)")
     logger.info("Applied migration v9")
+
+
+def migration_v10(conn):
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_flights_fnum_date ON flights (flight_number, date(departure_time))")
+    conn.execute("DELETE FROM db_version")
+    conn.execute("INSERT INTO db_version (version) VALUES (10)")
+    logger.info("Applied migration v10")
 
 
 def apply_migrations():
@@ -159,6 +172,9 @@ def apply_migrations():
     current = get_current_version(conn)
     if current < 9:
         migration_v9(conn)
+    current = get_current_version(conn)
+    if current < 10:
+        migration_v10(conn)
     conn.execute("DELETE FROM settings WHERE key NOT IN (?, ?, ?, ?, ?)", ("scrape_delay_ms", "fetch_max_months", "fetch_max_days", "favorite_max_items", "google_consent_cookie"))
     conn.execute("INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)", ("google_consent_cookie", "CAESHAgBEhJnd3NfMjAyMzA4MTAtMF9SQzIaAmRlIAEaBgiAo_CmBg"))
     conn.commit()
