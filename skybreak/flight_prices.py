@@ -4,8 +4,7 @@ from datetime import datetime
 logger = logging.getLogger(__name__)
 DB_PATH = os.environ.get("DB_FILE", "/data/skybreak.db")
 
-from fast_flights import FlightData, Passengers, get_flights
-
+from fast_flights import Passengers, get_flights
 try:
     from fast_flights import FlightQuery
 except ImportError:
@@ -54,8 +53,9 @@ def fetch_prices_favorite(favorite_id, force=False):
                 )
                 result_out = get_flights(q=q_out.pb(), trip="one-way", passengers=Passengers(adults=1), seat="economy", fetch_mode="common")
             else:
-                fd_out = FlightData(date=str(out_trip_date or trip_date), from_airport=start_airport, to_airport=dest_airport, max_stops=0)
-                result_out = get_flights(flight_data=[fd_out], trip="one-way", passengers=Passengers(adults=1), seat="economy", fetch_mode="common")
+                # Fallback: nur wenn FlightQuery nicht verfügbar
+                logger.warning("FlightQuery nicht verfügbar, Preisabfrage übersprungen")
+                result_out = None
         except Exception as e:
             logger.warning("fast-flights Hinflug Fehler: %s", e)
             result_out = None
@@ -98,8 +98,8 @@ def fetch_prices_favorite(favorite_id, force=False):
                 )
                 result_ret = get_flights(q=q_ret.pb(), trip="one-way", passengers=Passengers(adults=1), seat="economy", fetch_mode="common")
             else:
-                fd_ret = FlightData(date=str(ret_trip_date or trip_date), from_airport=dest_airport, to_airport=start_airport, max_stops=0)
-                result_ret = get_flights(flight_data=[fd_ret], trip="one-way", passengers=Passengers(adults=1), seat="economy", fetch_mode="common")
+                logger.warning("FlightQuery nicht verfügbar (Rückflug), Preisabfrage übersprungen")
+                result_ret = None
         except Exception as e:
             logger.warning("fast-flights Rückflug Fehler: %s", e)
             result_ret = None
