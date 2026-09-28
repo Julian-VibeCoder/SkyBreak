@@ -117,6 +117,19 @@ def migration_v8(conn):
     conn.execute("INSERT INTO db_version (version) VALUES (8)")
     logger.info("Applied migration v8")
 
+
+
+def migration_v9(conn):
+    # Index für price-history Abfrage (favorite_id + fetched_at ASC) und DESC-Order
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_favorite_prices_fav_fetched_asc ON favorite_trip_prices (favorite_id, fetched_at ASC)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_favorite_prices_fav_fetched_desc ON favorite_trip_prices (favorite_id, fetched_at DESC)")
+    # Index für favorite_trips id-Query (fetch_prices_favorite)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_favorite_trips_id ON favorite_trips (id)")
+    conn.execute("DELETE FROM db_version")
+    conn.execute("INSERT INTO db_version (version) VALUES (9)")
+    logger.info("Applied migration v9")
+
+
 def apply_migrations():
     conn = sqlite3.connect(DB_FILE, timeout=30.0)
     current = get_current_version(conn)
@@ -143,6 +156,9 @@ def apply_migrations():
     current = get_current_version(conn)
     if current < 8:
         migration_v8(conn)
+    current = get_current_version(conn)
+    if current < 9:
+        migration_v9(conn)
     conn.execute("DELETE FROM settings WHERE key NOT IN (?, ?, ?, ?, ?)", ("scrape_delay_ms", "fetch_max_months", "fetch_max_days", "favorite_max_items", "google_consent_cookie"))
     conn.execute("INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)", ("google_consent_cookie", "CAESHAgBEhJnd3NfMjAyMzA4MTAtMF9SQzIaAmRlIAEaBgiAo_CmBg"))
     conn.commit()
