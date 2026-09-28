@@ -1,19 +1,8 @@
-"""Preisabfrage über fast-flights 2.2 (v2-API)."""
-import sqlite3, os, logging, json
+"""Preisabfrage über fast-flights 3.x (keine Fallbacks/Playwright)."""
+import sqlite3, os, logging
 from datetime import datetime
 logger = logging.getLogger(__name__)
 DB_PATH = os.environ.get("DB_FILE", "/data/skybreak.db")
-
-from fast_flights import get_flights
-from fast_flights.querying import Query
-from fast_flights.fetcher import fetch_flights_html
-try:
-    from fast_flights import FlightQuery
-except ImportError:
-    FlightQuery = None
-from fast_flights.pb import flights_pb2
-FlightData = flights_pb2.FlightData
-from fast_flights.querying import create_query, Passengers
 
 def _load_cookie():
     try:
@@ -24,24 +13,46 @@ def _load_cookie():
     except Exception:
         return None
 
+from fast_flights import FlightQuery, Passengers, Query, create_query
+from fast_flights.exceptions import FlightsNotFound
+from fast_flights.parser import parse
+
+FLIGHTS_URL = "https://www.google.com/travel/flights"
+
 _cookie_value = _load_cookie()
-_original_fetch = fetch_flights_html
+from primp import Client
+_client = Client(impersonate="chrome_145", impersonate_os="macos", referer=True, cookie_store=True, verify=False)
+if _cookie_value:
+    _client.set_cookies("https://www.google.com", {"SOCS": _cookie_value})
+    logger.info("Cookie gesetzt")
+else:
+    logger.info("Kein Cookie in DB")
 
-def _fetch_with_cookie(q, /, *, proxy=None, fetch_integration=None):
-    from primp import Client
-    if _cookie_value:
-        client = Client(impersonate="chrome_145", impersonate_os="macos", referer=True, proxy=proxy, cookie_store=True)
-        client.set_cookies("https://www.google.com", {"SOCS": _cookie_value})
-        from fast_flights.querying import Query as QT
-        params = q.params() if isinstance(q, QT) else {"q": q}
-        from fast_flights.fetcher import URL
-        res = client.get(URL, params=params)
-        return res.text
-    return _original_fetch(q, proxy=proxy, fetch_integration=fetch_integration)
+def _split_date_time(value):
+    """'2026-10-02 12:05' / '2026-10-02T12:05' -> ('2026-10-02', (12, 5)); ohne Uhrzeit -> (date, None)."""
+    s = str(value or "").strip().replace("T", " ")
+    date_part, _, time_part = s.partition(" ")
+    if not time_part:
+        return date_part, None
+    hh, mm = time_part.split(":")[:2]
+    return date_part, (int(hh), int(mm))
 
-import fast_flights.fetcher
-fast_flights.fetcher.fetch_flights_html = _fetch_with_cookie
-from fast_flights.pb.flights_pb2 import Airport
+def _get_exact_price(q: Query, dep_time=None):
+    """Günstigster Preis der Suche; mit dep_time=(h, m) nur Flüge mit genau dieser Abflugzeit."""
+    res = _client.get(FLIGHTS_URL, params=q.params())
+    assert res.status_code == 200, f"{res.status_code}"
+    if "consent.google.com" in str(res.url):
+        raise RuntimeError("Google Consent-Seite erhalten (SOCS-Cookie fehlt/ungültig)")
+    try:
+        result = parse(res.text)
+    except FlightsNotFound:
+        return None
+    prices = [
+        float(f.price) for f in result
+        if f.price is not None and f.flights
+        and (dep_time is None or tuple(f.flights[0].departure.time) == tuple(dep_time))
+    ]
+    return min(prices) if prices else None
 
 def fetch_prices_favorite(favorite_id, force=False):
     try:
@@ -49,116 +60,51 @@ def fetch_prices_favorite(favorite_id, force=False):
         if not force:
             row = conn.execute("SELECT fetched_at FROM favorite_trip_prices WHERE favorite_id = ? ORDER BY fetched_at DESC LIMIT 1", (favorite_id,)).fetchone()
             if row and row[0]:
-                fetched_dt = datetime.fromisoformat(str(row[0]).replace("Z", "+00:00")) if row[0] else None
+                fetched_dt = datetime.fromisoformat(str(row[0]).replace("Z","+00:00")) if row[0] else None
                 if fetched_dt:
-                    age_hours = (datetime.now(fetched_dt.tzinfo) - fetched_dt).total_seconds()/3600 if fetched_dt.tzinfo else (datetime.now() - fetched_dt).total_seconds()/3600
-                    if age_hours < 12:
+                    age = (datetime.now(fetched_dt.tzinfo)-fetched_dt).total_seconds()/3600 if fetched_dt.tzinfo else (datetime.now()-fetched_dt).total_seconds()/3600
+                    if age < 12:
                         conn.close(); return get_prices_for_favorite(favorite_id)
+        row = conn.execute("SELECT trip_date, start_airport, destination_airport, outbound_trip_date, return_trip_date, return_time FROM favorite_trips WHERE id = ?", (favorite_id,)).fetchone()
         conn.close()
-        conn = sqlite3.connect(DB_PATH, timeout=30.0)
-        row = conn.execute("SELECT trip_date, start_airport, destination_airport, outbound_trip_date, return_trip_date, outbound_flight_number, return_flight_number FROM favorite_trips WHERE id = ?", (favorite_id,)).fetchone()
-        if not row:
-            conn.close()
-            return None
-        trip_date, start_airport, dest_airport, out_trip_date, ret_trip_date = row[0], row[1], row[2], row[3], row[4]
-        flight_no_filter = (row[5] or '').upper().replace(' ', '') if row[5] else ''
-        ret_flight_no_filter = (row[6] or '').upper().replace(' ', '') if row[6] else ''
-        if not start_airport or not dest_airport:
-            logger.warning("Favorit %s fehlt Start-/Ziel-Flughafen", favorite_id)
-            conn.close()
-            return None
-        conn.close()
-        # Filterwerte extrahieren (Flugnummer + Uhrzeit)
-        out_fnum_filter = flight_no_filter  # z.B. DE1409
-        ret_fnum_filter = ret_flight_no_filter
-        # Uhrzeit-Filter basierend auf Favoriten-Daten oder Standard (z.B. 14-20 Uhr)
-        earliest_dep_hour = 14 if out_fnum_filter else None
-        latest_dep_hour = 20 if out_fnum_filter else None
-        try:
-            q_out = create_query(
-                flights=[FlightQuery(date=str(out_trip_date or trip_date), from_airport=start_airport, to_airport=dest_airport, max_stops=0, earliest_departure_hour=(earliest_dep_hour or 14), latest_departure_hour=(latest_dep_hour or 20))],
-                seat="economy",
-                trip="one-way",
-                passengers=Passengers(adults=1),
-                language="de",
-                currency="EUR",
-            )
-            result_out = get_flights(q_out)
-        except Exception as e:
-            logger.warning("fast-flights Hinflug Fehler: %s", e)
-            result_out = None
+        if not row: return {"favorite_id":favorite_id,"error":"Favorit nicht gefunden"}
+        trip_date, start_airport, dest_airport, out_trip_date, ret_trip_date, return_time_db = row
+        if not start_airport or not dest_airport: return {"favorite_id":favorite_id,"error":"Flughafen fehlt"}
+        out_date, out_time = _split_date_time(out_trip_date or trip_date)
+        ret_date, _ret_time_from_date = _split_date_time(ret_trip_date or trip_date)
+        # Rückflug-Abflugzeit explizit aus Favorit-Spalte return_time bevorzugen
+        ret_time = None
+        if return_time_db and isinstance(return_time_db, str) and ":" in str(return_time_db):
+            time_str = str(return_time_db).strip()
+            # Wenn nur Uhrzeit (z.B. 16:35) ohne Datum, mit ret_date kombinieren
+            if len(time_str) <= 5 and time_str.count(':') == 1:
+                combined = f"{ret_date or trip_date} {time_str}"
+                _, ret_time = _split_date_time(combined)
+            else:
+                _, ret_time = _split_date_time(str(return_time_db))
+        elif _ret_time_from_date:
+            ret_time = _ret_time_from_date
+        q_out = create_query(flights=[FlightQuery(date=out_date, from_airport=str(start_airport), to_airport=str(dest_airport), max_stops=0)], seat="economy", trip="one-way", passengers=Passengers(adults=1), language="de", currency="EUR")
+        q_ret = create_query(flights=[FlightQuery(date=ret_date, from_airport=str(dest_airport), to_airport=str(start_airport), max_stops=0)], seat="economy", trip="one-way", passengers=Passengers(adults=1), language="de", currency="EUR")
         price_out = None
-        if result_out and hasattr(result_out, 'flights'):
-            flights_out = getattr(result_out, 'flights', None) or []
-            for f in flights_out:
-                try:
-                    # Filter nach Flugnummer (falls angegeben) und Uhrzeit
-                    f_flight_no = getattr(f, 'flight_no', '') or ''
-                    f_departure = getattr(f, 'departure', '') or ''
-                    # Wenn Favorit eine Flugnummer hat, nur diesen berücksichtigen
-                    if out_fnum_filter:
-                        if out_fnum_filter not in str(f_flight_no).replace(' ', ''):
-                            continue
-                    # Uhrzeit-Filter (z.B. 16:00-17:10 Bereich für 16:35)
-                    price_str = getattr(f, 'price', None)
-                    if price_str is not None:
-                        try:
-                            price_out_val = float(''.join(ch for ch in str(price_str) if ch.isdigit() or ch == '.'))
-                        except:
-                            price_out_val = None
-                        if price_out_val is not None:
-                            price_out = price_out_val
-                            break
-                except Exception:
-                    pass
-
-        try:
-            earliest_ret_hour = 14 if ret_fnum_filter else None
-            latest_ret_hour = 20 if ret_fnum_filter else None
-            q_ret = create_query(
-                flights=[FlightQuery(date=str(ret_trip_date or trip_date), from_airport=dest_airport, to_airport=start_airport, max_stops=0, earliest_departure_hour=(earliest_ret_hour or 14), latest_departure_hour=(latest_ret_hour or 20))],
-                seat="economy",
-                trip="one-way",
-                passengers=Passengers(adults=1),
-                language="de",
-                currency="EUR",
-            )
-            result_ret = get_flights(q_ret)
-        except Exception as e:
-            logger.warning("fast-flights Rückflug Fehler: %s", e)
-            result_ret = None
         price_ret = None
-        if result_ret and hasattr(result_ret, 'flights'):
-            flights_ret = getattr(result_ret, 'flights', None) or []
-            for f in flights_ret:
-                try:
-                    f_flight_no = getattr(f, 'flight_no', '') or ''
-                    if ret_fnum_filter:
-                        if ret_fnum_filter not in str(f_flight_no).replace(' ', ''):
-                            continue
-                    price_str = getattr(f, 'price', None)
-                    if price_str is not None:
-                        try:
-                            price_ret_val = float(''.join(ch for ch in str(price_str) if ch.isdigit() or ch == '.'))
-                        except:
-                            price_ret_val = None
-                        if price_ret_val is not None:
-                            price_ret = price_ret_val
-                            break
-                except Exception:
-                    pass
-        total = (price_out or 0) + (price_ret or 0) if (price_out is not None or price_ret is not None) else None
+        try:
+            price_out = _get_exact_price(q_out, out_time)
+        except Exception as e: logger.warning("Hinflug Fehler: %s", e)
+        try:
+            price_ret = _get_exact_price(q_ret, ret_time)
+        except Exception as e: logger.warning("Rückflug Fehler: %s", e)
+        total = (price_out or 0)+(price_ret or 0) if (price_out is not None or price_ret is not None) else None
         conn = sqlite3.connect(DB_PATH, timeout=30.0)
         conn.execute("INSERT OR REPLACE INTO favorite_trip_prices (favorite_id, price_outbound, price_return, price_total, currency, fetched_at) VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)", (favorite_id, price_out, price_ret, total, "EUR"))
         conn.commit(); conn.close()
-        return {"favorite_id": favorite_id, "price_outbound": price_out, "price_return": price_ret, "price_total": total, "currency": "EUR", "fetched_at": datetime.now().isoformat()}
+        return {"favorite_id":favorite_id,"price_outbound":price_out,"price_return":price_ret,"price_total":total,"currency":"EUR","fetched_at":datetime.now().isoformat()}
     except Exception as e:
-        logger.exception("fast-flights Fehler für Favorit %s: %s", favorite_id, e)
-        return {"favorite_id": favorite_id, "error": str(e)}
-
+        logger.exception("Fehler %s: %s", favorite_id, e)
+        return {"favorite_id":favorite_id,"error":str(e)}
 def get_prices_for_favorite(favorite_id):
     conn = sqlite3.connect(DB_PATH, timeout=30.0)
     row = conn.execute("SELECT price_outbound, price_return, price_total, currency, fetched_at FROM favorite_trip_prices WHERE favorite_id = ? ORDER BY fetched_at DESC LIMIT 1", (favorite_id,)).fetchone()
     conn.close()
-    if row: return {"favorite_id": favorite_id, "price_outbound": row[0], "price_return": row[1], "price_total": row[2], "currency": row[3], "fetched_at": row[4]}
+    if row: return {"favorite_id":favorite_id,"price_outbound":row[0],"price_return":row[1],"price_total":row[2],"currency":row[3],"fetched_at":row[4]}
     return None
