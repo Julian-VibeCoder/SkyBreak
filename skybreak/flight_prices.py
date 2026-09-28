@@ -6,12 +6,39 @@ DB_PATH = os.environ.get("DB_FILE", "/data/skybreak.db")
 
 from fast_flights import get_flights
 from fast_flights.querying import Query
+from fast_flights.fetcher import fetch_flights_html
 try:
     from fast_flights import FlightQuery
 except ImportError:
     FlightQuery = None
 from fast_flights.pb import flights_pb2
 FlightData = flights_pb2.FlightData
+
+def _load_cookie():
+    try:
+        conn = sqlite3.connect(DB_PATH, timeout=5.0)
+        row = conn.execute("SELECT value FROM settings WHERE key='google_consent_cookie'").fetchone()
+        conn.close()
+        return row[0] if row else None
+    except Exception:
+        return None
+
+_cookie_value = _load_cookie()
+_original_fetch = fetch_flights_html
+
+def _fetch_with_cookie(q, /, *, proxy=None, fetch_integration=None):
+    from primp import Client
+    if _cookie_value:
+        client = Client(impersonate="chrome_145", impersonate_os="macos", referer=True, proxy=proxy, cookie_store=True, cookies={"CONSENT": _cookie_value})
+        from fast_flights.querying import Query as QT
+        params = q.params() if isinstance(q, QT) else {"q": q}
+        from fast_flights.fetcher import URL
+        res = client.get(URL, params=params)
+        return res.text
+    return _original_fetch(q, proxy=proxy, fetch_integration=fetch_integration)
+
+import fast_flights.fetcher
+fast_flights.fetcher.fetch_flights_html = _fetch_with_cookie
 from fast_flights.pb.flights_pb2 import Airport
 
 def fetch_prices_favorite(favorite_id, force=False):
