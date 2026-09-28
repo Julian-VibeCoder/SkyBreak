@@ -62,8 +62,8 @@ function FavoriteTripPrices() {
       <button disabled={updating || progress} onClick={handleUpdate} style={{ padding: '6px 10px', borderRadius: 6, border: 'none', background: (updating || progress) ? '#475569' : '#38bdf8', color: '#0f172a', fontWeight: 700, fontSize: 12, cursor: (updating || progress) ? 'not-allowed' : 'pointer', marginBottom: 8 }}>
         {progress || updating ? 'Updating prices... (running)' : 'Update prices'}
       </button>
-      <div style={{ background: 'rgba(255,255,255,0.03)', borderRadius: 14, padding: 16, border: '1px solid rgba(255,255,255,0.08)' }}>
-        <h4 style={{ margin: '0 0 10px', fontSize: 15, fontWeight: 700, color: '#f8fafc' }}>Favorite Prices — Grouped by Destination</h4>
+      <div style={{ background: 'rgba(255,255,255,0.03)', borderRadius: 16, padding: 20, border: '1px solid rgba(255,255,255,0.08)', boxShadow: '0 4px 20px rgba(0,0,0,0.25)' }}>
+        <h4 style={{ margin: '0 0 14px', fontSize: 16, fontWeight: 700, color: '#f8fafc', letterSpacing: 0.2 }}>Favorite Prices — Grouped by Destination</h4>
         {groupKeys.map(key => {
           const grp = groupsObj[key];
           const isOpen = !!expanded['price_' + key];
@@ -78,33 +78,35 @@ function FavoriteTripPrices() {
               </button>
               {isOpen && (
                 <div style={{ padding: 8 }}>
-                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, tableLayout: 'fixed' }}>
+                  <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: '0 4px', fontSize: 12, tableLayout: 'fixed' }}>
                     <thead><tr style={{ borderBottom: '1px solid rgba(255,255,255,0.12)' }}>
-                      <th style={{ textAlign: 'left', padding: '6px 8px', color: '#94a3b8' }}>Origin</th>
-                      <th style={{ textAlign: 'left', padding: '6px 8px', color: '#94a3b8' }}>Outbound</th>
-                      <th style={{ textAlign: 'left', padding: '6px 8px', color: '#94a3b8' }}>Return</th>
-                      <th style={{ textAlign: 'left', padding: '6px 8px', color: '#94a3b8' }}>Cost</th>
-                      <th style={{ textAlign: 'left', padding: '6px 8px', color: '#94a3b8' }}></th>
+                      <th style={{ textAlign: 'left', padding: '6px 8px', color: '#94a3b8', whiteSpace: 'nowrap', width: '18%' }}>Origin</th>
+                      <th style={{ textAlign: 'left', padding: '6px 8px', color: '#94a3b8', whiteSpace: 'nowrap', width: '22%' }}>Outbound</th>
+                      <th style={{ textAlign: 'left', padding: '6px 8px', color: '#94a3b8', whiteSpace: 'nowrap', width: '22%' }}>Return</th>
+                      <th style={{ textAlign: 'left', padding: '6px 8px', color: '#94a3b8', whiteSpace: 'nowrap', width: '20%' }}>Cost</th>
+                      <th style={{ textAlign: 'center', padding: '6px 8px', color: '#94a3b8', whiteSpace: 'nowrap', width: '18%' }}>Actions</th>
                     </tr></thead>
                     <tbody>
                       {grp.map(f => (
-                        <tr key={f.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
-                          <td style={{ padding: '6px 8px', color: '#f8fafc', fontWeight: 600 }}>{f.start_city_country || '—'} <span style={{ color: '#94a3b8', fontSize: 10 }}>({f.start_airport || ''})</span></td>
-                          <td style={{ padding: '6px 8px', color: '#f8fafc', fontWeight: 600 }}>
-                            <div>{f.outbound_trip_date || f.trip_date} {fmtTime(f.outbound_departure)}</div>
-                            <div style={{ color: '#cbd5e1', fontSize: 11 }}>{f.outbound_flight || f.outbound_flight_number || '—'}</div>
+                        <tr key={f.id} style={{ background: 'rgba(255,255,255,0.03)', borderRadius: 8, borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                          <td style={{ padding: '8px', color: '#f8fafc', fontWeight: 600, fontSize: 11, verticalAlign: 'top', wordBreak: 'break-word' }}>{f.start_city_country || '—'} <span style={{ color: '#94a3b8', fontSize: 10 }}>{f.start_airport || ''}</span></td>
+                          <td style={{ padding: '8px', color: '#f8fafc', fontWeight: 600, fontSize: 11, verticalAlign: 'top', wordBreak: 'break-word' }}>
+                            <div style={{ whiteSpace: 'nowrap' }}>{f.outbound_trip_date || f.trip_date} {fmtTime(f.outbound_departure)}</div>
+                            <div style={{ color: '#cbd5e1', fontSize: 10 }}>{f.outbound_flight || f.outbound_flight_number || '—'}</div>
                           </td>
-                          <td style={{ padding: '6px 8px', color: '#f8fafc', fontWeight: 600 }}>
-                            <div>{f.return_trip_date || f.trip_date} {fmtTime(f.return_departure)}</div>
-                            <div style={{ color: '#cbd5e1', fontSize: 11 }}>{f.return_flight || f.return_flight_number || '—'}</div>
+                          <td style={{ padding: '8px', color: '#f8fafc', fontWeight: 600, fontSize: 11, verticalAlign: 'top', wordBreak: 'break-word' }}>
+                            <div style={{ whiteSpace: 'nowrap' }}>{f.return_trip_date || f.trip_date} {fmtTime(f.return_departure)}</div>
+                            <div style={{ color: '#cbd5e1', fontSize: 10 }}>{f.return_flight || f.return_flight_number || '—'}</div>
                           </td>
-                          <td style={{ padding: '6px 8px', color: '#38bdf8', fontWeight: 700, whiteSpace: 'nowrap' }}>
+                          <td style={{ padding: '8px', color: '#38bdf8', fontWeight: 700, fontSize: 11, verticalAlign: 'top', whiteSpace: 'nowrap' }}>
                             <div>Total: {f.price_total != null ? f.price_total + ' €' : '—'}</div>
-                            <div style={{ fontSize: 10, color: '#94a3b8' }}>(updated: {f.fetched_at ? new Date(f.fetched_at).toLocaleString() : '—'})</div>
+                            <div style={{ fontSize: 9, color: '#94a3b8' }}>(updated: {f.fetched_at ? new Date(f.fetched_at).toLocaleDateString() : '—'})</div>
                           </td>
-                          <td style={{ padding: '6px 8px', textAlign: 'right' }}>
-                            <button onClick={() => openChartFor(f.id)} style={{ padding: '4px 8px', borderRadius: 6, border: 'none', background: '#38bdf8', color: '#0f172a', fontSize: 11, fontWeight: 600, cursor: 'pointer', marginRight: 4 }}>Chart</button>
-                            <button onClick={async () => { await fetch('/api/favorites/'+f.id, {method:'DELETE'}); load(); }} style={{ padding: '4px 8px', borderRadius: 6, border: 'none', background: '#ef4444', color: '#fff', fontSize: 11, fontWeight: 600, cursor: 'pointer', marginTop: 4 }}>Delete</button>
+                          <td style={{ padding: '8px', textAlign: 'center', verticalAlign: 'middle', whiteSpace: 'nowrap' }}>
+                            <div style={{ display: 'flex', gap: 6, justifyContent: 'center', flexWrap: 'wrap' }}>
+                              <button onClick={() => openChartFor(f.id)} style={{ padding: '5px 10px', borderRadius: 6, border: 'none', background: '#38bdf8', color: '#0f172a', fontSize: 11, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>Chart</button>
+                              <button onClick={async () => { await fetch('/api/favorites/'+f.id, {method:'DELETE'}); load(); }} style={{ padding: '5px 10px', borderRadius: 6, border: 'none', background: '#ef4444', color: '#fff', fontSize: 11, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>Delete</button>
+                            </div>
                           </td>
                         </tr>
                       ))}
