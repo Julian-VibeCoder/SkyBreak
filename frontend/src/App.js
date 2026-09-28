@@ -259,13 +259,13 @@ export default function App() {
 
   return (
     <div style={{
-      display: 'flex', minHeight: '100vh', fontFamily: "'Inter', 'Segoe UI', system-ui, sans-serif",
+      display: 'flex', flexDirection: 'row', minHeight: '100dvh', fontFamily: "'Inter', 'Segoe UI', system-ui, sans-serif",
       background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)', color: '#f1f5f9'
     }}>
       <CollapsibleSidebar><aside style={{
-        width: 260, flexShrink: 0, background: 'rgba(15,23,42,0.85)',
+        width: 220, flexShrink: 0, background: 'rgba(15,23,42,0.85)',
         backdropFilter: 'blur(12px)', borderRight: '1px solid rgba(255,255,255,0.06)',
-        padding: '28px 20px', display: 'flex', flexDirection: 'column', gap: 10,
+        padding: '18px 14px', display: 'flex', flexDirection: 'column', gap: 10,
         boxShadow: '4px 0 30px rgba(0,0,0,0.25)'
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 28 }}>
