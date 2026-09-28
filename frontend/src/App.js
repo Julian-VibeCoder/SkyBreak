@@ -82,7 +82,7 @@ function FavoriteTripPrices() {
                 <div>Outbound: <strong>{f.price_outbound != null ? f.price_outbound + ' €' : '—'}</strong></div>
                 <div>Return: <strong>{f.price_return != null ? f.price_return + ' €' : '—'}</strong></div>
                 <div style={{ color: '#38bdf8', fontWeight: 700 }}>Total: {f.price_total != null ? f.price_total + ' €' : '—'} {f.currency ? '('+f.currency+')' : ''}</div>
-                  <div style={{ color: '#94a3b8', fontSize: 9, marginTop: 2 }}>(aktualisiert: {f.fetched_at ? f.fetched_at.substring(0,16).replace('T',' ') : (f.fetched_at ? f.fetched_at.substring(0,16).replace('T',' ') : '—')})</div>
+                  <div style={{ color: '#94a3b8', fontSize: 9, marginTop: 2 }}>(updated: {f.fetched_at ? new Date(f.fetched_at).toLocaleString() : '—'})</div>
               </td>
               <td style={{ padding: 6, textAlign: 'right', verticalAlign: 'top' }}>
                 <button onClick={() => openChartFor(f.id)} style={{ padding: '4px 8px', borderRadius: 6, border: 'none', background: '#38bdf8', color: '#0f172a', fontSize: 11, fontWeight: 600, cursor: 'pointer', marginRight: 4 }}>Chart</button>
