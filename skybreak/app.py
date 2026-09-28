@@ -256,23 +256,77 @@ def list_favorites():
             conn2.close()
         start_city_country = fetch_city_country(start_airport)
         dest_city_country = fetch_city_country(dest_airport)
-        # Dauer berechnen (Hinflug)
+        # Dauer berechnen (Hinflug) mit Zeitzonen
         duration_out = None
         if out_dep and out_arr:
             try:
-                from datetime import datetime
-                d1 = datetime.fromisoformat(str(out_dep).replace("Z","+00:00"))
-                d2 = datetime.fromisoformat(str(out_arr).replace("Z","+00:00"))
-                duration_out = int(round((d2 - d1).total_seconds() / 60))
+                from datetime import datetime, timedelta
+                from zoneinfo import ZoneInfo
+                import airportsdata
+                AIRPORTS = airportsdata.load("IATA")
+                def tz_for(code):
+                    a = AIRPORTS.get(code)
+                    return ZoneInfo(a["tz"]) if a and a.get("tz") else None
+                dep_str = str(out_dep)
+                arr_str = str(out_arr)
+                # Datum und Zeit extrahieren
+                dep_date = dep_str[:10] if len(dep_str) >= 10 else dep_str.split()[0] if " " in dep_str else None
+                arr_date = arr_str[:10] if len(arr_str) >= 10 else arr_str.split()[0] if " " in arr_str else None
+                dep_t_str = dep_str[11:16] if len(dep_str) >= 16 else dep_str.split()[1] if " " in dep_str else "00:00"
+                arr_t_str = arr_str[11:16] if len(arr_str) >= 16 else arr_str.split()[1] if " " in arr_str else "00:00"
+                from datetime import time as dt_time
+                dep_t = datetime.strptime(dep_t_str, "%H:%M").time()
+                arr_t = datetime.strptime(arr_t_str, "%H:%M").time()
+                # Zeitzonen
+                tz_start = tz_for(start_airport) if start_airport else None
+                tz_dest = tz_for(dest_airport) if dest_airport else None
+                if dep_date and arr_date and (tz_start or tz_dest):
+                    dep_date_obj = datetime.strptime(dep_date, "%Y-%m-%d").date()
+                    arr_date_obj = datetime.strptime(arr_date, "%Y-%m-%d").date()
+                    dep = datetime.combine(dep_date_obj, dep_t, tz_start) if tz_start else datetime.combine(dep_date_obj, dep_t)
+                    arr = datetime.combine(arr_date_obj, arr_t, tz_dest) if tz_dest else datetime.combine(arr_date_obj, arr_t)
+                    if dep.tzinfo and arr.tzinfo:
+                        duration_out = int(round((arr - dep).total_seconds() / 60))
+                    else:
+                        duration_out = int(round((arr - dep).total_seconds() / 60))
+                else:
+                    # Fallback: direkte Differenz wie bisher
+                    d1 = datetime.fromisoformat(str(dep_str).replace("Z","+00:00"))
+                    d2 = datetime.fromisoformat(str(arr_str).replace("Z","+00:00"))
+                    duration_out = int(round((d2 - d1).total_seconds() / 60))
             except Exception:
                 pass
         duration_ret = None
         if ret_dep and ret_arr:
             try:
-                from datetime import datetime
-                d1 = datetime.fromisoformat(str(ret_dep).replace("Z","+00:00"))
-                d2 = datetime.fromisoformat(str(ret_arr).replace("Z","+00:00"))
-                duration_ret = int(round((d2 - d1).total_seconds() / 60))
+                from datetime import datetime, timedelta
+                from zoneinfo import ZoneInfo
+                import airportsdata
+                AIRPORTS = airportsdata.load("IATA")
+                def tz_for(code):
+                    a = AIRPORTS.get(code)
+                    return ZoneInfo(a["tz"]) if a and a.get("tz") else None
+                # Rückflug: Start = dest_airport, Ziel = start_airport
+                dep_str = str(ret_dep)
+                arr_str = str(ret_arr)
+                dep_date = dep_str[:10] if len(dep_str) >= 10 else dep_str.split()[0] if " " in dep_str else None
+                arr_date = arr_str[:10] if len(arr_str) >= 10 else arr_str.split()[0] if " " in arr_str else None
+                dep_t_str = dep_str[11:16] if len(dep_str) >= 16 else dep_str.split()[1] if " " in dep_str else "00:00"
+                arr_t_str = arr_str[11:16] if len(arr_str) >= 16 else arr_str.split()[1] if " " in arr_str else "00:00"
+                dep_t = datetime.strptime(dep_t_str, "%H:%M").time()
+                arr_t = datetime.strptime(arr_t_str, "%H:%M").time()
+                tz_start = tz_for(dest_airport) if dest_airport else None
+                tz_dest = tz_for(start_airport) if start_airport else None
+                if dep_date and arr_date and (tz_start or tz_dest):
+                    dep_date_obj = datetime.strptime(dep_date, "%Y-%m-%d").date()
+                    arr_date_obj = datetime.strptime(arr_date, "%Y-%m-%d").date()
+                    dep = datetime.combine(dep_date_obj, dep_t, tz_start) if tz_start else datetime.combine(dep_date_obj, dep_t)
+                    arr = datetime.combine(arr_date_obj, arr_t, tz_dest) if tz_dest else datetime.combine(arr_date_obj, arr_t)
+                    duration_ret = int(round((arr - dep).total_seconds() / 60))
+                else:
+                    d1 = datetime.fromisoformat(str(dep_str).replace("Z","+00:00"))
+                    d2 = datetime.fromisoformat(str(arr_str).replace("Z","+00:00"))
+                    duration_ret = int(round((d2 - d1).total_seconds() / 60))
             except Exception:
                 pass
         start_name = fetch_airport_name(start_airport) or start_airport or ""
