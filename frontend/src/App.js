@@ -59,11 +59,11 @@ function FavoriteTripPrices() {
 
   return (
     <div>
-      <button disabled={updating || progress} onClick={handleUpdate} style={{ padding: '6px 10px', borderRadius: 6, border: 'none', background: (updating || progress) ? '#475569' : '#38bdf8', color: '#0f172a', fontWeight: 700, fontSize: 12, cursor: (updating || progress) ? 'not-allowed' : 'pointer', marginBottom: 8 }}>
-        {progress || updating ? 'Updating prices... (running)' : 'Update prices'}
-      </button>
-      <div style={{ background: 'rgba(255,255,255,0.03)', borderRadius: 16, padding: 20, border: '1px solid rgba(255,255,255,0.08)', boxShadow: '0 4px 20px rgba(0,0,0,0.25)' }}>
-        <h4 style={{ margin: '0 0 14px', fontSize: 16, fontWeight: 700, color: '#f8fafc', letterSpacing: 0.2 }}>Favorite Prices — Grouped by Destination</h4>
+      <div style={{ background: 'rgba(255,255,255,0.03)', borderRadius: 16, padding: 16, border: '1px solid rgba(255,255,255,0.08)', boxShadow: '0 4px 20px rgba(0,0,0,0.25)' }}>
+        <h4 style={{ margin: '0 0 10px', fontSize: 16, fontWeight: 700, color: '#f8fafc', letterSpacing: 0.2 }}>Favorite Trips</h4>
+        <button disabled={updating || progress} onClick={handleUpdate} style={{ padding: '6px 10px', borderRadius: 6, border: 'none', background: (updating || progress) ? '#475569' : '#38bdf8', color: '#0f172a', fontWeight: 700, fontSize: 12, cursor: (updating || progress) ? 'not-allowed' : 'pointer', marginBottom: 8 }}>
+          {progress || updating ? 'Updating prices... (running)' : 'Update prices'}
+        </button>
         {groupKeys.map(key => {
           const grp = groupsObj[key];
           const isOpen = !!expanded['price_' + key];
@@ -73,7 +73,7 @@ function FavoriteTripPrices() {
             <div key={key} style={{ marginBottom: 10, border: '1px solid rgba(255,255,255,0.08)', borderRadius: 10, overflow: 'hidden' }}>
               <button onClick={() => toggle('price_' + key)} style={{ width: '100%', textAlign: 'left', padding: '10px 14px', background: 'rgba(255,255,255,0.06)', color: '#f8fafc', fontWeight: 700, fontSize: 14, border: 'none', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <span>{(grp[0]?.dest_city_country || key) + ' (' + key + ')'}</span>
-                <span style={{ color: '#38bdf8', fontWeight: 600, fontSize: 12 }}>Günstigster: {cheapestPrice}</span>
+                <span style={{ color: '#38bdf8', fontWeight: 600, fontSize: 12 }}>Cheapest: {cheapestPrice}</span>
                 <span style={{ color: '#94a3b8', fontWeight: 500 }}>{isOpen ? '▲' : '▼'}</span>
               </button>
               {isOpen && (
@@ -587,7 +587,7 @@ export default function App() {
             }}>
               <h3 style={{ margin: '0 0 14px', fontSize: 18, fontWeight: 700, color: '#f8fafc' }}>Cost Overview</h3>
               <div style={{ marginTop: 10, padding: 12, background: 'rgba(255,255,255,0.06)', borderRadius: 10, border: '1px solid rgba(255,255,255,0.1)' }}>
-                <h4 style={{ color: '#f8fafc', fontSize: 14, marginBottom: 8 }}>Favorite Trips — Prices</h4>
+                <h4 style={{ color: '#f8fafc', fontSize: 14, marginBottom: 8, marginTop: 0 }}>Favorite Trips</h4>
                 <FavoriteTripPrices />
               </div>
             </section>
@@ -628,9 +628,9 @@ export default function App() {
                   </span>
                 </div>
                 <div style={{ marginTop: 20, borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: 16 }}>
-                  <h4 style={{ margin: '0 0 10px', fontSize: 15, fontWeight: 600, color: '#f8fafc' }}>Preis-Update Intervall (Stunden)</h4>
-                  <p style={{ color: '#94a3b8', fontSize: 13, marginBottom: 10 }}>Wie oft Favoriten-Preise automatisch aktualisiert werden. Default 6h.</p>
-                  <input id="priceIntervalHours" type="number" min="1" max="168" value={settings.price_fetch_interval_hours || '6'} onChange={e => setSettings(s => ({...s, price_fetch_interval_hours: e.target.value}))} placeholder="Stunden" style={{ padding: '8px 12px', borderRadius: 10, border: '1px solid rgba(255,255,255,0.15)', background: 'rgba(255,255,255,0.06)', color: '#f8fafc', fontSize: 14, width: 140 }} />
+                  <h4 style={{ margin: '0 0 10px', fontSize: 15, fontWeight: 600, color: '#f8fafc' }}>Price Update Interval (Hours)</h4>
+                  <p style={{ color: '#94a3b8', fontSize: 13, marginBottom: 10 }}>How often favorite prices are updated automatically. Default 6h.</p>
+                  <input id="priceIntervalHours" type="number" min="1" max="168" value={settings.price_fetch_interval_hours || '6'} onChange={e => setSettings(s => ({...s, price_fetch_interval_hours: e.target.value}))} placeholder="Hours" style={{ padding: '8px 12px', borderRadius: 10, border: '1px solid rgba(255,255,255,0.15)', background: 'rgba(255,255,255,0.06)', color: '#f8fafc', fontSize: 14, width: 140 }} />
                 </div>
                 <div style={{ marginTop: 20, borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: 16 }}>
                   <h4 style={{ margin: '0 0 10px', fontSize: 15, fontWeight: 600, color: '#f8fafc' }}>Scrape Delay (ms)</h4>
