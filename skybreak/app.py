@@ -129,7 +129,7 @@ def price_history():
         return jsonify({"error": "invalid trip_id"}), 400
     conn = sqlite3.connect(DB_PATH, timeout=30.0)
     rows = conn.execute(
-    "SELECT date, price_outbound, price_return, price_total FROM price_history WHERE favorite_id = ? ORDER BY date ASC",
+    "SELECT date(fetched_at) AS date, price_outbound, price_return, price_total FROM favorite_trip_prices WHERE favorite_id = ? ORDER BY fetched_at ASC",
     (favorite_id,)
     ).fetchall()
     conn.close()

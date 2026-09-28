@@ -111,6 +111,12 @@ def migration_v7(conn):
     conn.execute("INSERT INTO db_version (version) VALUES (7)")
     logger.info("Applied migration v7")
 
+def migration_v8(conn):
+    conn.execute("DROP TABLE IF EXISTS price_history")
+    conn.execute("DELETE FROM db_version")
+    conn.execute("INSERT INTO db_version (version) VALUES (8)")
+    logger.info("Applied migration v8")
+
 def apply_migrations():
     conn = sqlite3.connect(DB_FILE, timeout=30.0)
     current = get_current_version(conn)
@@ -134,6 +140,9 @@ def apply_migrations():
     current = get_current_version(conn)
     if current < 7:
         migration_v7(conn)
+    current = get_current_version(conn)
+    if current < 8:
+        migration_v8(conn)
     conn.execute("DELETE FROM settings WHERE key NOT IN (?, ?, ?, ?, ?)", ("scrape_delay_ms", "fetch_max_months", "fetch_max_days", "favorite_max_items", "google_consent_cookie"))
     conn.execute("INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)", ("google_consent_cookie", "CAESHAgBEhJnd3NfMjAyMzA4MTAtMF9SQzIaAmRlIAEaBgiAo_CmBg"))
     conn.commit()
