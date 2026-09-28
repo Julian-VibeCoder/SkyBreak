@@ -19,6 +19,8 @@ function FavoriteTripPrices() {
   const [sortDir, setSortDir] = useState('desc');
   const [chartOpen, setChartOpen] = useState(false);
   const [chartData, setChartData] = useState(null);
+  const [expanded, setExpanded] = useState({});
+  const toggle = (k) => setExpanded(e => ({...e, [k]: !e[k]}));
   const load = () => { setLoading(true); fetch('/api/favorites').then(r => r.json()).then(d => { setPrices(Array.isArray(d) ? d : []); }).catch(() => setPrices([])).finally(() => setLoading(false)); };
   const [pollActive, setPollActive] = useState(true);
   useEffect(() => { load(); let prevRunning = false; const iv = setInterval(() => { if (!pollActive) return; fetch('/api/prices/status').then(r=>r.json()).then(s=>{ if(s.running){setProgress(true); setPollActive(true);}else{setProgress(false); setPollActive(false); if(prevRunning && !s.running){ load(); } } prevRunning = !!s.running; }).catch(()=>{}); }, 1500); return () => clearInterval(iv); }, [pollActive]);
@@ -43,56 +45,77 @@ function FavoriteTripPrices() {
     if (av > bv) return sortDir === 'asc' ? 1 : -1;
     return 0;
   });
-  const fmtTime = (t) => { if (!t) return '—'; if (t.includes('T')) return t.substring(11,16); const parts = String(t).split(' '); return parts.length > 1 ? parts[1].substring(0,5) : t; };
   const fmtDur = (m) => { if (m == null || m === undefined || m === '') return '—'; return m + ' min'; };
+  const fmtTime = (t) => { if (!t) return '—'; if (t.includes('T')) return t.substring(11,16); const parts = String(t).split(' '); return parts.length > 1 ? parts[1].substring(0,5) : t; };
   const headerBtn = (key, label) => (
     <button onClick={() => { if (sortKey === key) { setSortDir(sortDir === 'asc' ? 'desc' : 'asc'); } else { setSortKey(key); setSortDir('asc'); } }} style={{ background:'none', border:'none', color:'#f8fafc', fontWeight:700, fontSize:11, cursor:'pointer', padding:0 }}>
       {label} {sortKey === key ? (sortDir === 'asc' ? '▲' : '▼') : ''}
     </button>
   );
+  // Gruppierung nach Ziel (analog turnarounds)
+  const groupsObj = {};
+  prices.forEach(p => { const key = p.destination_airport || p.dest_city_country || '-'; if (!groupsObj[key]) groupsObj[key] = []; groupsObj[key].push(p); });
+  const groupKeys = Object.keys(groupsObj).sort();
+
   return (
     <div>
       <button disabled={updating || progress} onClick={handleUpdate} style={{ padding: '6px 10px', borderRadius: 6, border: 'none', background: (updating || progress) ? '#475569' : '#38bdf8', color: '#0f172a', fontWeight: 700, fontSize: 12, cursor: (updating || progress) ? 'not-allowed' : 'pointer', marginBottom: 8 }}>
         {progress || updating ? 'Updating prices... (running)' : 'Update prices'}
       </button>
-      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, color: '#f1f5f9' }}>
-        <thead>
-          <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.15)', textAlign: 'left' }}>
-            <th style={{ padding: 6 }}>{headerBtn('start_city_country', 'Origin')}</th>
-            <th style={{ padding: 6 }}>{headerBtn('dest_city_country', 'Destination')}</th>
-            <th style={{ padding: 6 }}>{headerBtn('trip_date', 'Outbound')}</th>
-            <th style={{ padding: 6 }}>{headerBtn('trip_date', 'Return')}</th>
-            <th style={{ padding: 6 }}>{headerBtn('price_total', 'Cost')}</th>
-            <th style={{ padding: 6 }}></th>
-          </tr>
-        </thead>
-        <tbody>
-          {sorted.map(f => (
-            <tr key={f.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
-              <td style={{ padding: 6, verticalAlign: 'top' }}>{f.start_city_country || '—'} <span style={{ color: '#94a3b8', fontSize: 10 }}>({f.start_airport || ''})</span></td>
-              <td style={{ padding: 6, verticalAlign: 'top' }}>{f.dest_city_country || '—'} <span style={{ color: '#94a3b8', fontSize: 10 }}>({f.destination_airport || ''})</span></td>
-              <td style={{ padding: 6, verticalAlign: 'top' }}>
-                <div style={{ fontWeight: 600 }}>{f.outbound_trip_date || f.trip_date} {fmtTime(f.outbound_departure)}</div>
-                <div style={{ color: '#cbd5e1', fontSize: 11 }}>{f.outbound_flight || f.outbound_flight_number || '—'} {fmtDur(f.duration_outbound_minutes)}</div>
-              </td>
-              <td style={{ padding: 6, verticalAlign: 'top' }}>
-                <div style={{ fontWeight: 600 }}>{f.return_trip_date || f.trip_date} {fmtTime(f.return_departure)}</div>
-                <div style={{ color: '#cbd5e1', fontSize: 11 }}>{f.return_flight || f.return_flight_number || '—'} {fmtDur(f.duration_return_minutes)}</div>
-              </td>
-              <td style={{ padding: 6, verticalAlign: 'top', whiteSpace: 'nowrap' }}>
-                <div>Outbound: <strong>{f.price_outbound != null ? f.price_outbound + ' €' : '—'}</strong></div>
-                <div>Return: <strong>{f.price_return != null ? f.price_return + ' €' : '—'}</strong></div>
-                <div style={{ color: '#38bdf8', fontWeight: 700 }}>Total: {f.price_total != null ? f.price_total + ' €' : '—'} {f.currency ? '('+f.currency+')' : ''}</div>
-                  <div style={{ color: '#94a3b8', fontSize: 9, marginTop: 2 }}>(updated: {f.fetched_at ? new Date(f.fetched_at).toLocaleString() : '—'})</div>
-              </td>
-              <td style={{ padding: 6, textAlign: 'right', verticalAlign: 'top' }}>
-                <button onClick={() => openChartFor(f.id)} style={{ padding: '4px 8px', borderRadius: 6, border: 'none', background: '#38bdf8', color: '#0f172a', fontSize: 11, fontWeight: 600, cursor: 'pointer', marginRight: 4 }}>Chart</button>
-                <button onClick={async () => { await fetch('/api/favorites/'+f.id, {method:'DELETE'}); load(); }} style={{ padding: '4px 8px', borderRadius: 6, border: 'none', background: '#ef4444', color: '#fff', fontSize: 11, fontWeight: 600, cursor: 'pointer', marginTop: 6 }}>Delete</button>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      <div style={{ background: 'rgba(255,255,255,0.03)', borderRadius: 14, padding: 16, border: '1px solid rgba(255,255,255,0.08)' }}>
+        <h4 style={{ margin: '0 0 10px', fontSize: 15, fontWeight: 700, color: '#f8fafc' }}>Favorite Prices — Grouped by Destination</h4>
+        {groupKeys.map(key => {
+          const grp = groupsObj[key];
+          const isOpen = !!expanded['price_' + key];
+          const cheapest = grp.reduce((m, p) => (p.price_total != null && (m == null || p.price_total < m.price_total)) ? p : m, null);
+          const cheapestPrice = cheapest && cheapest.price_total != null ? cheapest.price_total + ' €' : '—';
+          return (
+            <div key={key} style={{ marginBottom: 10, border: '1px solid rgba(255,255,255,0.08)', borderRadius: 10, overflow: 'hidden' }}>
+              <button onClick={() => toggle('price_' + key)} style={{ width: '100%', textAlign: 'left', padding: '10px 14px', background: 'rgba(255,255,255,0.06)', color: '#f8fafc', fontWeight: 700, fontSize: 14, border: 'none', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span>{(grp[0]?.dest_city_country || key) + ' (' + key + ')'}</span>
+                <span style={{ color: '#38bdf8', fontWeight: 600, fontSize: 12 }}>Günstigster: {cheapestPrice}</span>
+                <span style={{ color: '#94a3b8', fontWeight: 500 }}>{isOpen ? '▲' : '▼'}</span>
+              </button>
+              {isOpen && (
+                <div style={{ padding: 8 }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, tableLayout: 'fixed' }}>
+                    <thead><tr style={{ borderBottom: '1px solid rgba(255,255,255,0.12)' }}>
+                      <th style={{ textAlign: 'left', padding: '6px 8px', color: '#94a3b8' }}>Origin</th>
+                      <th style={{ textAlign: 'left', padding: '6px 8px', color: '#94a3b8' }}>Outbound</th>
+                      <th style={{ textAlign: 'left', padding: '6px 8px', color: '#94a3b8' }}>Return</th>
+                      <th style={{ textAlign: 'left', padding: '6px 8px', color: '#94a3b8' }}>Cost</th>
+                      <th style={{ textAlign: 'left', padding: '6px 8px', color: '#94a3b8' }}></th>
+                    </tr></thead>
+                    <tbody>
+                      {grp.map(f => (
+                        <tr key={f.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                          <td style={{ padding: '6px 8px', color: '#f8fafc', fontWeight: 600 }}>{f.start_city_country || '—'} <span style={{ color: '#94a3b8', fontSize: 10 }}>({f.start_airport || ''})</span></td>
+                          <td style={{ padding: '6px 8px', color: '#f8fafc', fontWeight: 600 }}>
+                            <div>{f.outbound_trip_date || f.trip_date} {fmtTime(f.outbound_departure)}</div>
+                            <div style={{ color: '#cbd5e1', fontSize: 11 }}>{f.outbound_flight || f.outbound_flight_number || '—'}</div>
+                          </td>
+                          <td style={{ padding: '6px 8px', color: '#f8fafc', fontWeight: 600 }}>
+                            <div>{f.return_trip_date || f.trip_date} {fmtTime(f.return_departure)}</div>
+                            <div style={{ color: '#cbd5e1', fontSize: 11 }}>{f.return_flight || f.return_flight_number || '—'}</div>
+                          </td>
+                          <td style={{ padding: '6px 8px', color: '#38bdf8', fontWeight: 700, whiteSpace: 'nowrap' }}>
+                            <div>Total: {f.price_total != null ? f.price_total + ' €' : '—'}</div>
+                            <div style={{ fontSize: 10, color: '#94a3b8' }}>(updated: {f.fetched_at ? new Date(f.fetched_at).toLocaleString() : '—'})</div>
+                          </td>
+                          <td style={{ padding: '6px 8px', textAlign: 'right' }}>
+                            <button onClick={() => openChartFor(f.id)} style={{ padding: '4px 8px', borderRadius: 6, border: 'none', background: '#38bdf8', color: '#0f172a', fontSize: 11, fontWeight: 600, cursor: 'pointer', marginRight: 4 }}>Chart</button>
+                            <button onClick={async () => { await fetch('/api/favorites/'+f.id, {method:'DELETE'}); load(); }} style={{ padding: '4px 8px', borderRadius: 6, border: 'none', background: '#ef4444', color: '#fff', fontSize: 11, fontWeight: 600, cursor: 'pointer', marginTop: 4 }}>Delete</button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
       <ChartModal open={chartOpen} onClose={() => setChartOpen(false)} data={chartData} />
     </div>
   );
