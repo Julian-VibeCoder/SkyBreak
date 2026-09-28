@@ -169,6 +169,7 @@ export default function App() {
         setSettings({
           fetch_max_months: data.fetch_max_months || data.fetch_max_days || '1',
           scrape_delay_ms: data.scrape_delay_ms || '500',
+          price_fetch_interval_hours: data.price_fetch_interval_hours || '6',
           google_consent_cookie: data.google_consent_cookie || 'CAESHAgBEhJnd3NfMjAyMzA4MTAtMF9SQzIaAmRlIAEaBgiAo_CmBg'
         });
       }).catch(() => {});
@@ -602,6 +603,7 @@ export default function App() {
                 const body = {
                   fetch_max_months: settings.fetch_max_months || document.getElementById('fetchMaxMonths')?.value || 7,
                   scrape_delay_ms: settings.scrape_delay_ms || document.getElementById('delayMs')?.value || '500',
+                  price_fetch_interval_hours: settings.price_fetch_interval_hours || document.getElementById('priceIntervalHours')?.value || '6',
                   google_consent_cookie: settings.google_consent_cookie || document.getElementById('consentCookie')?.value || 'CAESHAgBEhJnd3NfMjAyMzA4MTAtMF9SQzIaAmRlIAEaBgiAo_CmBg'
                 };
                 const res = await fetch('/api/settings', {
@@ -611,7 +613,7 @@ export default function App() {
                 });
                 if (res.ok) {
                   alert('Settings saved');
-                  setSettings({ fetch_max_months: body.fetch_max_months, scrape_delay_ms: body.scrape_delay_ms, google_consent_cookie: body.google_consent_cookie });
+                  setSettings({ fetch_max_months: body.fetch_max_months, scrape_delay_ms: body.scrape_delay_ms, price_fetch_interval_hours: body.price_fetch_interval_hours, google_consent_cookie: body.google_consent_cookie });
                 } else {
                   alert('Failed to save');
                 }
@@ -622,6 +624,11 @@ export default function App() {
                   <span style={{ fontSize: 12, color: '#94a3b8', lineHeight: 1.5, maxWidth: 360 }}>
                     The parameter <code>fetch_max_months</code> controls how many months ahead flight data is fetched. It is globally shared between all airports.
                   </span>
+                </div>
+                <div style={{ marginTop: 20, borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: 16 }}>
+                  <h4 style={{ margin: '0 0 10px', fontSize: 15, fontWeight: 600, color: '#f8fafc' }}>Preis-Update Intervall (Stunden)</h4>
+                  <p style={{ color: '#94a3b8', fontSize: 13, marginBottom: 10 }}>Wie oft Favoriten-Preise automatisch aktualisiert werden. Default 6h.</p>
+                  <input id="priceIntervalHours" type="number" min="1" max="168" value={settings.price_fetch_interval_hours || '6'} onChange={e => setSettings(s => ({...s, price_fetch_interval_hours: e.target.value}))} placeholder="Stunden" style={{ padding: '8px 12px', borderRadius: 10, border: '1px solid rgba(255,255,255,0.15)', background: 'rgba(255,255,255,0.06)', color: '#f8fafc', fontSize: 14, width: 140 }} />
                 </div>
                 <div style={{ marginTop: 20, borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: 16 }}>
                   <h4 style={{ margin: '0 0 10px', fontSize: 15, fontWeight: 600, color: '#f8fafc' }}>Scrape Delay (ms)</h4>
