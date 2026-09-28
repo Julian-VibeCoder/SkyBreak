@@ -29,7 +29,8 @@ _original_fetch = fetch_flights_html
 def _fetch_with_cookie(q, /, *, proxy=None, fetch_integration=None):
     from primp import Client
     if _cookie_value:
-        client = Client(impersonate="chrome_145", impersonate_os="macos", referer=True, proxy=proxy, cookie_store=True, cookies={"CONSENT": _cookie_value})
+        client = Client(impersonate="chrome_145", impersonate_os="macos", referer=True, proxy=proxy, cookie_store=True)
+        client.set_cookies("https://www.google.com", {"SOCS": _cookie_value})
         from fast_flights.querying import Query as QT
         params = q.params() if isinstance(q, QT) else {"q": q}
         from fast_flights.fetcher import URL
