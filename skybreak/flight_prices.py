@@ -4,11 +4,14 @@ from datetime import datetime
 logger = logging.getLogger(__name__)
 DB_PATH = os.environ.get("DB_FILE", "/data/skybreak.db")
 
-from fast_flights import Passengers, get_flights
+from fast_flights import get_flights
+from fast_flights.querying import Query, Passengers
 try:
     from fast_flights import FlightQuery
 except ImportError:
     FlightQuery = None
+from fast_flights.pb import flights_pb2
+FlightData = flights_pb2.FlightData
 
 def fetch_prices_favorite(favorite_id, force=False):
     try:
@@ -41,24 +44,9 @@ def fetch_prices_favorite(favorite_id, force=False):
         # Uhrzeit-Filter basierend auf Favoriten-Daten oder Standard (z.B. 14-20 Uhr)
         earliest_dep_hour = 14 if out_fnum_filter else None
         latest_dep_hour = 20 if out_fnum_filter else None
-        try:
-            if FlightQuery is not None:
-                q_out = FlightQuery(
-                    date=str(out_trip_date or trip_date),
-                    from_airport=start_airport,
-                    to_airport=dest_airport,
-                    max_stops=0,
-                    earliest_departure_hour=earliest_dep_hour,
-                    latest_departure_hour=latest_dep_hour,
-                )
-                result_out = get_flights(q_out.pb(), trip="one-way", passengers=Passengers(adults=1), seat="economy", fetch_mode="common")
-            else:
-                # Fallback: nur wenn FlightQuery nicht verfügbar
-                logger.warning("FlightQuery nicht verfügbar, Preisabfrage übersprungen")
-                result_out = None
-        except Exception as e:
-            logger.warning("fast-flights Hinflug Fehler: %s", e)
-            result_out = None
+            fd_out = FlightData(date=str(out_trip_date or trip_date), from_airport=start_airport, to_airport=dest_airport, max_stops=0, earliest_departure_hour=(earliest_dep_hour or 14), latest_departure_hour=(latest_dep_hour or 20))
+            q_out = Query(flight_data=[fd_out], trip="one-way", passengers=[Passengers(adults=1)], seat="economy")
+            result_out = get_flights(q_out)
         price_out = None
         if result_out and hasattr(result_out, 'flights'):
             flights_out = getattr(result_out, 'flights', None) or []
@@ -87,19 +75,9 @@ def fetch_prices_favorite(favorite_id, force=False):
         try:
             earliest_ret_hour = 14 if ret_fnum_filter else None
             latest_ret_hour = 20 if ret_fnum_filter else None
-            if FlightQuery is not None:
-                q_ret = FlightQuery(
-                    date=str(ret_trip_date or trip_date),
-                    from_airport=dest_airport,
-                    to_airport=start_airport,
-                    max_stops=0,
-                    earliest_departure_hour=earliest_ret_hour,
-                    latest_departure_hour=latest_ret_hour,
-                )
-                result_ret = get_flights(q_ret.pb(), trip="one-way", passengers=Passengers(adults=1), seat="economy", fetch_mode="common")
-            else:
-                logger.warning("FlightQuery nicht verfügbar (Rückflug), Preisabfrage übersprungen")
-                result_ret = None
+            fd_ret = FlightData(date=str(ret_trip_date or trip_date), from_airport=dest_airport, to_airport=start_airport, max_stops=0, earliest_departure_hour=(earliest_ret_hour or 14), latest_departure_hour=(latest_ret_hour or 20))
+            q_ret = Query(flight_data=[fd_ret], trip="one-way", passengers=[Passengers(adults=1)], seat="economy")
+            result_ret = get_flights(q_ret)
         except Exception as e:
             logger.warning("fast-flights Rückflug Fehler: %s", e)
             result_ret = None
