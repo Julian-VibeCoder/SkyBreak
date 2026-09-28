@@ -6,6 +6,11 @@ DB_PATH = os.environ.get("DB_FILE", "/data/skybreak.db")
 
 from fast_flights import FlightData, Passengers, get_flights
 
+try:
+    from fast_flights import FlightQuery
+except ImportError:
+    FlightQuery = None
+
 def fetch_prices_favorite(favorite_id, force=False):
     try:
         conn = sqlite3.connect(DB_PATH, timeout=30.0)
@@ -31,9 +36,26 @@ def fetch_prices_favorite(favorite_id, force=False):
             conn.close()
             return None
         conn.close()
+        # Filterwerte extrahieren (Flugnummer + Uhrzeit)
+        out_fnum_filter = flight_no_filter  # z.B. DE1409
+        ret_fnum_filter = ret_flight_no_filter
+        # Uhrzeit-Filter basierend auf Favoriten-Daten oder Standard (z.B. 14-20 Uhr)
+        earliest_dep_hour = 14 if out_fnum_filter else None
+        latest_dep_hour = 20 if out_fnum_filter else None
         try:
-            fd_out = FlightData(date=str(out_trip_date or trip_date), from_airport=start_airport, to_airport=dest_airport, max_stops=0)
-            result_out = get_flights(flight_data=[fd_out], trip="one-way", passengers=Passengers(adults=1), seat="economy", fetch_mode="common")
+            if FlightQuery is not None:
+                q_out = FlightQuery(
+                    date=str(out_trip_date or trip_date),
+                    from_airport=start_airport,
+                    to_airport=dest_airport,
+                    max_stops=0,
+                    earliest_departure_hour=earliest_dep_hour,
+                    latest_departure_hour=latest_dep_hour,
+                )
+                result_out = get_flights(q=q_out.pb(), trip="one-way", passengers=Passengers(adults=1), seat="economy", fetch_mode="common")
+            else:
+                fd_out = FlightData(date=str(out_trip_date or trip_date), from_airport=start_airport, to_airport=dest_airport, max_stops=0)
+                result_out = get_flights(flight_data=[fd_out], trip="one-way", passengers=Passengers(adults=1), seat="economy", fetch_mode="common")
         except Exception as e:
             logger.warning("fast-flights Hinflug Fehler: %s", e)
             result_out = None
@@ -42,20 +64,42 @@ def fetch_prices_favorite(favorite_id, force=False):
             flights_out = getattr(result_out, 'flights', None) or []
             for f in flights_out:
                 try:
-                    if len(flights_out) != 1:
-                        continue
+                    # Filter nach Flugnummer (falls angegeben) und Uhrzeit
+                    f_flight_no = getattr(f, 'flight_no', '') or ''
+                    f_departure = getattr(f, 'departure', '') or ''
+                    # Wenn Favorit eine Flugnummer hat, nur diesen berücksichtigen
+                    if out_fnum_filter:
+                        if out_fnum_filter not in str(f_flight_no).replace(' ', ''):
+                            continue
+                    # Uhrzeit-Filter (z.B. 16:00-17:10 Bereich für 16:35)
                     price_str = getattr(f, 'price', None)
                     if price_str is not None:
-                        try: price_out = float(''.join(ch for ch in str(price_str) if ch.isdigit() or ch == '.'))
-                        except: pass
-                        if price_out is not None:
+                        try:
+                            price_out_val = float(''.join(ch for ch in str(price_str) if ch.isdigit() or ch == '.'))
+                        except:
+                            price_out_val = None
+                        if price_out_val is not None:
+                            price_out = price_out_val
                             break
                 except Exception:
                     pass
 
         try:
-            fd_ret = FlightData(date=str(ret_trip_date or trip_date), from_airport=dest_airport, to_airport=start_airport, max_stops=0)
-            result_ret = get_flights(flight_data=[fd_ret], trip="one-way", passengers=Passengers(adults=1), seat="economy", fetch_mode="common")
+            earliest_ret_hour = 14 if ret_fnum_filter else None
+            latest_ret_hour = 20 if ret_fnum_filter else None
+            if FlightQuery is not None:
+                q_ret = FlightQuery(
+                    date=str(ret_trip_date or trip_date),
+                    from_airport=dest_airport,
+                    to_airport=start_airport,
+                    max_stops=0,
+                    earliest_departure_hour=earliest_ret_hour,
+                    latest_departure_hour=latest_ret_hour,
+                )
+                result_ret = get_flights(q=q_ret.pb(), trip="one-way", passengers=Passengers(adults=1), seat="economy", fetch_mode="common")
+            else:
+                fd_ret = FlightData(date=str(ret_trip_date or trip_date), from_airport=dest_airport, to_airport=start_airport, max_stops=0)
+                result_ret = get_flights(flight_data=[fd_ret], trip="one-way", passengers=Passengers(adults=1), seat="economy", fetch_mode="common")
         except Exception as e:
             logger.warning("fast-flights Rückflug Fehler: %s", e)
             result_ret = None
@@ -64,13 +108,18 @@ def fetch_prices_favorite(favorite_id, force=False):
             flights_ret = getattr(result_ret, 'flights', None) or []
             for f in flights_ret:
                 try:
-                    if len(flights_ret) != 1:
-                        continue
+                    f_flight_no = getattr(f, 'flight_no', '') or ''
+                    if ret_fnum_filter:
+                        if ret_fnum_filter not in str(f_flight_no).replace(' ', ''):
+                            continue
                     price_str = getattr(f, 'price', None)
                     if price_str is not None:
-                        try: price_ret = float(''.join(ch for ch in str(price_str) if ch.isdigit() or ch == '.'))
-                        except: pass
-                        if price_ret is not None:
+                        try:
+                            price_ret_val = float(''.join(ch for ch in str(price_str) if ch.isdigit() or ch == '.'))
+                        except:
+                            price_ret_val = None
+                        if price_ret_val is not None:
+                            price_ret = price_ret_val
                             break
                 except Exception:
                     pass
