@@ -52,16 +52,16 @@ function FavoriteTripPrices() {
   return (
     <div>
       <button disabled={updating || progress} onClick={handleUpdate} style={{ padding: '6px 10px', borderRadius: 6, border: 'none', background: (updating || progress) ? '#475569' : '#38bdf8', color: '#0f172a', fontWeight: 700, fontSize: 12, cursor: (updating || progress) ? 'not-allowed' : 'pointer', marginBottom: 8 }}>
-        {progress || updating ? 'Preise aktualisieren... (running)' : 'Preise aktualisieren'}
+        {progress || updating ? 'Updating prices... (running)' : 'Update prices'}
       </button>
       <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, color: '#f1f5f9' }}>
         <thead>
           <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.15)', textAlign: 'left' }}>
-            <th style={{ padding: 6 }}>{headerBtn('start_city_country', 'Start')}</th>
-            <th style={{ padding: 6 }}>{headerBtn('dest_city_country', 'Ziel')}</th>
-            <th style={{ padding: 6 }}>{headerBtn('trip_date', 'Hinflug')}</th>
-            <th style={{ padding: 6 }}>{headerBtn('trip_date', 'Rückflug')}</th>
-            <th style={{ padding: 6 }}>{headerBtn('price_total', 'Kosten')}</th>
+            <th style={{ padding: 6 }}>{headerBtn('start_city_country', 'Origin')}</th>
+            <th style={{ padding: 6 }}>{headerBtn('dest_city_country', 'Destination')}</th>
+            <th style={{ padding: 6 }}>{headerBtn('trip_date', 'Outbound')}</th>
+            <th style={{ padding: 6 }}>{headerBtn('trip_date', 'Return')}</th>
+            <th style={{ padding: 6 }}>{headerBtn('price_total', 'Cost')}</th>
             <th style={{ padding: 6 }}></th>
           </tr>
         </thead>
@@ -79,14 +79,14 @@ function FavoriteTripPrices() {
                 <div style={{ color: '#cbd5e1', fontSize: 11 }}>{f.return_flight || f.return_flight_number || '—'} {fmtDur(f.duration_return_minutes)}</div>
               </td>
               <td style={{ padding: 6, verticalAlign: 'top', whiteSpace: 'nowrap' }}>
-                <div>Hin: <strong>{f.price_outbound != null ? f.price_outbound + ' €' : '—'}</strong></div>
-                <div>Rück: <strong>{f.price_return != null ? f.price_return + ' €' : '—'}</strong></div>
-                <div style={{ color: '#38bdf8', fontWeight: 700 }}>Gesamt: {f.price_total != null ? f.price_total + ' €' : '—'} {f.currency ? '('+f.currency+')' : ''}</div>
-                  <div style={{ color: '#94a3b8', fontSize: 9, marginTop: 2 }}>(aktualisiert: {f.fetched_at ? f.fetched_at.substring(0,16).replace('T',' ') : (f.fetched_at ? f.fetched_at.substring(0,16).replace('T',' ') : '—')})</div>
+                <div>Outbound: <strong>{f.price_outbound != null ? f.price_outbound + ' €' : '—'}</strong></div>
+                <div>Return: <strong>{f.price_return != null ? f.price_return + ' €' : '—'}</strong></div>
+                <div style={{ color: '#38bdf8', fontWeight: 700 }}>Total: {f.price_total != null ? f.price_total + ' €' : '—'} {f.currency ? '('+f.currency+')' : ''}</div>
+                  <div style={{ color: '#94a3b8', fontSize: 9, marginTop: 2 }}>(updated: {f.fetched_at ? new Date(f.fetched_at).toLocaleString() : '—'})</div>
               </td>
               <td style={{ padding: 6, textAlign: 'right', verticalAlign: 'top' }}>
                 <button onClick={() => openChartFor(f.id)} style={{ padding: '4px 8px', borderRadius: 6, border: 'none', background: '#38bdf8', color: '#0f172a', fontSize: 11, fontWeight: 600, cursor: 'pointer', marginRight: 4 }}>Chart</button>
-                <button onClick={async () => { await fetch('/api/favorites/'+f.id, {method:'DELETE'}); load(); }} style={{ padding: '4px 8px', borderRadius: 6, border: 'none', background: '#ef4444', color: '#fff', fontSize: 11, fontWeight: 600, cursor: 'pointer', marginTop: 6 }}>Löschen</button>
+                <button onClick={async () => { await fetch('/api/favorites/'+f.id, {method:'DELETE'}); load(); }} style={{ padding: '4px 8px', borderRadius: 6, border: 'none', background: '#ef4444', color: '#fff', fontSize: 11, fontWeight: 600, cursor: 'pointer', marginTop: 6 }}>Delete</button>
               </td>
             </tr>
           ))}
@@ -169,7 +169,7 @@ export default function App() {
       params.append('max_trip_days', maxTripDays);
       fetch('/api/turnarounds?' + params.toString()).then(r => r.json()).then(data => setTurnarounds(data.turnarounds || data.results || [])).catch(() => setTurnarounds([]));
     }
-  }, [tab, tripStart, tripEnd, startWeekdays, endWeekdays, maxDepToDest, minRetDep, startAirport, endAirport, maxTripDays]);
+  }, [tab, tripStart, tripEnd, startWeekdays, endWeekdays, maxDepToDest, minRetDep, startAirport, endAirport, maxTripDays, minTripDays]);
 
   useEffect(() => {
     if (tab === 'flights') loadFlights();
@@ -225,7 +225,7 @@ export default function App() {
   const submit = async (e) => {
     e.preventDefault();
     const raw = code.trim().toUpperCase();
-    if (!/^[A-Z0-9]{3}$/.test(raw)) { setFeedback('Ungültiger IATA-Code'); return; }
+    if (!/^[A-Z0-9]{3}$/.test(raw)) { setFeedback('Invalid IATA code'); return; }
     const res = await fetch('/api/airports', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({code: raw}) });
     if (res.ok) {
       setFeedback('Gespeichert: ' + raw);
@@ -340,9 +340,9 @@ export default function App() {
                   <button type="submit" style={{
                     padding: '10px 18px', borderRadius: 10, border: 'none', background: 'linear-gradient(135deg, #38bdf8, #818cf8)',
                     color: '#0f172a', fontWeight: 700, fontSize: 15, cursor: 'pointer', boxShadow: '0 4px 14px rgba(56,189,248,0.35)'
-                  }}>Speichern</button>
+                  }}>Save</button>
                 </form>
-                <p style={{ margin: '12px 0 0', minHeight: 24, color: feedback.includes('Gespeichert') ? '#4ade80' : (feedback.includes('Fehler') || feedback.includes('Ungültig')) ? '#f87171' : '#94a3b8', fontSize: 13, fontWeight: 500 }}>{feedback}</p>
+                <p style={{ margin: '12px 0 0', minHeight: 24, color: feedback.includes('Saved') ? '#4ade80' : (feedback.includes('Error') || feedback.includes('Invalid')) ? '#f87171' : '#94a3b8', fontSize: 13, fontWeight: 500 }}>{feedback}</p>
               </section>
 
               <section style={{
@@ -379,8 +379,8 @@ export default function App() {
                 <input type='date' value={flightDate} onChange={e => { setFlightDate(e.target.value); loadFlights(); }} style={{ padding: '10px 14px', borderRadius: 10, border: '1px solid rgba(255,255,255,0.15)', background: 'rgba(255,255,255,0.06)', color: '#f8fafc', fontSize: 15 }} />
                 <button onClick={() => setFlightDate(new Date(new Date(flightDate).getTime() - 86400000).toISOString().split('T')[0])} style={{ padding: '10px 14px', borderRadius: 10, border: 'none', background: 'linear-gradient(135deg,#6366f1,#4f46e5)', color: '#fff', fontWeight: 700, cursor: 'pointer', fontSize: 13 }}>◀ Vorheriger Tag</button>
                 <button onClick={() => setFlightDate(new Date().toISOString().split('T')[0])} style={{ padding: '10px 14px', borderRadius: 10, border: 'none', background: 'linear-gradient(135deg,#f59e0b,#d97706)', color: '#fff', fontWeight: 700, cursor: 'pointer', fontSize: 13 }}>Heute</button>
-                <button onClick={() => setFlightDate(new Date(new Date(flightDate).getTime() + 86400000).toISOString().split('T')[0])} style={{ padding: '10px 14px', borderRadius: 10, border: 'none', background: 'linear-gradient(135deg,#6366f1,#4f46e5)', color: '#fff', fontWeight: 700, cursor: 'pointer', fontSize: 13 }}>Nächster Tag ▶</button>
-                <button onClick={() => fetch('/api/flights/fetch-now', {method:'POST'}).then(r => alert('Fetch gestartet'))} style={{padding:'6px 12px', borderRadius:8, border:'none', background:'#10b981', color:'#fff', fontWeight:700, cursor:'pointer', fontSize:13}}>Fetch Now</button>
+                <button onClick={() => setFlightDate(new Date(new Date(flightDate).getTime() + 86400000).toISOString().split('T')[0])} style={{ padding: '10px 14px', borderRadius: 10, border: 'none', background: 'linear-gradient(135deg,#6366f1,#4f46e5)', color: '#fff', fontWeight: 700, cursor: 'pointer', fontSize: 13 }}>Next Day ▶</button>
+                <button onClick={() => fetch('/api/flights/fetch-now', {method:'POST'}).then(r => alert('Fetch started'))} style={{padding:'6px 12px', borderRadius:8, border:'none', background:'#10b981', color:'#fff', fontWeight:700, cursor:'pointer', fontSize:13}}>Fetch Now</button>
                 
                 {scrapeRunning && (
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 12px', borderRadius: 8, background: 'rgba(16,185,129,0.15)', border: '1px solid rgba(16,185,129,0.35)' }}>
@@ -453,6 +453,13 @@ export default function App() {
               <p style={{ color: '#94a3b8', fontSize: 14, marginBottom: 18 }}>Find possible trip combinations based on date ranges and weekday preferences.</p>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 18, marginBottom: 18 }}>
                 <div style={{ background: 'rgba(255,255,255,0.03)', borderRadius: 14, padding: 16, border: '1px solid rgba(255,255,255,0.06)' }}>
+                  <label style={{ fontSize: 12, fontWeight: 600, color: '#f8fafc', display: 'block', marginBottom: 6 }}>Airport (Start & End)</label>
+                  <select value={startAirport} onChange={e => { setStartAirport(e.target.value); setEndAirport(e.target.value); }} style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.15)', background: 'rgba(255,255,255,0.06)', color: '#f8fafc', fontSize: 13, maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    <option value="">Select airport</option>
+                    {list.map(c => <option key={c} value={c} style={{ color: '#0f172a', background: '#f8fafc' }}>{c}{airportNames[c] ? ' — ' + airportNames[c] : ''}</option>)}
+                  </select>
+                </div>
+                <div style={{ background: 'rgba(255,255,255,0.03)', borderRadius: 14, padding: 16, border: '1px solid rgba(255,255,255,0.06)' }}>
                   <label style={{ fontSize: 12, fontWeight: 600, color: '#f8fafc', display: 'block', marginBottom: 6 }}>Trip Start Date</label>
                   <input type="date" value={tripStart} onChange={e => setTripStart(e.target.value)} style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.15)', background: 'rgba(255,255,255,0.06)', color: '#f8fafc', fontSize: 14, boxSizing: 'border-box', maxWidth: '100%' }} />
                 </div>
@@ -487,13 +494,6 @@ export default function App() {
                 <div style={{ background: 'rgba(255,255,255,0.03)', borderRadius: 14, padding: 16, border: '1px solid rgba(255,255,255,0.06)' }}>
                   <label style={{ fontSize: 12, fontWeight: 600, color: '#f8fafc', display: 'block', marginBottom: 6 }}>Latest Departure to Destination</label>
                   <input type="time" value={maxDepToDest} onChange={e => setMaxDepToDest(e.target.value)} style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.15)', background: 'rgba(255,255,255,0.06)', color: '#f8fafc', fontSize: 14, boxSizing: 'border-box', maxWidth: '100%' }} />
-                </div>
-                <div style={{ background: 'rgba(255,255,255,0.03)', borderRadius: 14, padding: 16, border: '1px solid rgba(255,255,255,0.06)' }}>
-                  <label style={{ fontSize: 12, fontWeight: 600, color: '#f8fafc', display: 'block', marginBottom: 6 }}>Airport (Start & End)</label>
-                  <select value={startAirport} onChange={e => { setStartAirport(e.target.value); setEndAirport(e.target.value); }} style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.15)', background: 'rgba(255,255,255,0.06)', color: '#f8fafc', fontSize: 13, maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                    <option value="">Select airport</option>
-                    {list.map(c => <option key={c} value={c} style={{ color: '#0f172a', background: '#f8fafc' }}>{c}{airportNames[c] ? ' — ' + airportNames[c] : ''}</option>)}
-                  </select>
                 </div>
                 <div style={{ background: 'rgba(255,255,255,0.03)', borderRadius: 14, padding: 16, border: '1px solid rgba(255,255,255,0.06)' }}>
                   <label style={{ fontSize: 12, fontWeight: 600, color: '#f8fafc', display: 'block', marginBottom: 6 }}>Earliest Return Departure</label>
@@ -540,7 +540,7 @@ export default function App() {
                                         {(t.rueckflug_abflug_zeit ? (t.rueckflug_abflug_zeit.substring ? t.rueckflug_abflug_zeit.substring(0,10) + ', ' + t.rueckflug_abflug_zeit.substring(11,16) : t.rueckflug_abflug_zeit.substring(0,10) + ', ' + t.rueckflug_abflug_zeit.substring(11,16)) : '-') + ' | ' + (t.rueckflug_flight_number || '-')}
                                       </td>
                                       <td style={{ padding: '6px 8px', color: '#38bdf8' }}>{(t.dauer_tage !== undefined ? t.dauer_tage + 'd' : (t.days ? t.days + 'd' : '-'))}</td>
-                                      <td style={{ padding: '6px 8px' }}><button onClick={async () => { const res = await fetch('/api/favorites', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({trip_date:t.hinflug_abflug_zeit ? t.hinflug_abflug_zeit.split(' ')[0] : '', outbound_trip_date:t.hinflug_abflug_zeit ? t.hinflug_abflug_zeit.split(' ')[0] : '', return_trip_date:t.rueckflug_abflug_zeit ? t.rueckflug_abflug_zeit.split(' ')[0] : '', start_time:t.hinflug_abflug_zeit ? t.hinflug_abflug_zeit.split(' ')[1] || '' : '', destination_airport: t.destination || t.hinflug_ziel || '', outbound_flight_number:t.hinflug_flight_number || '', return_flight_number:t.rueckflug_flight_number || '', start_airport: startAirport || ''})}); if(res.ok) { const idx = turnarounds.indexOf(t); if(idx >= 0) { const copy = [...turnarounds]; copy[idx] = {...copy[idx], is_favorite: true}; setTurnarounds(copy); } } }} style={{ padding:'4px 8px', borderRadius:6, border:'none', background: t.is_favorite ? '#38bdf8' : '#1e293b', color:'#fff', fontWeight:600, fontSize:12, cursor:'pointer', minWidth:110 }}>{t.is_favorite ? '★ Favorited' : '+ Favorit hinzufügen'}</button></td>
+                                      <td style={{ padding: '6px 8px' }}><button onClick={async () => { const res = await fetch('/api/favorites', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({trip_date:t.hinflug_abflug_zeit ? t.hinflug_abflug_zeit.split(' ')[0] : '', outbound_trip_date:t.hinflug_abflug_zeit ? t.hinflug_abflug_zeit.split(' ')[0] : '', return_trip_date:t.rueckflug_abflug_zeit ? t.rueckflug_abflug_zeit.split(' ')[0] : '', start_time:t.hinflug_abflug_zeit ? t.hinflug_abflug_zeit.split(' ')[1] || '' : '', destination_airport: t.destination || t.hinflug_ziel || '', outbound_flight_number:t.hinflug_flight_number || '', return_flight_number:t.rueckflug_flight_number || '', start_airport: startAirport || ''})}); if(res.ok) { const idx = turnarounds.indexOf(t); if(idx >= 0) { const copy = [...turnarounds]; copy[idx] = {...copy[idx], is_favorite: true}; setTurnarounds(copy); } } }} style={{ padding:'4px 8px', borderRadius:6, border:'none', background: t.is_favorite ? '#38bdf8' : '#1e293b', color:'#fff', fontWeight:600, fontSize:12, cursor:'pointer', minWidth:110 }}>{t.is_favorite ? '★ Favorited' : '+ Add to favorites'}</button></td>
                                     </tr>
                                   ))}
                                 </tbody>
@@ -563,7 +563,7 @@ export default function App() {
             }}>
               <h3 style={{ margin: '0 0 14px', fontSize: 18, fontWeight: 700, color: '#f8fafc' }}>Cost Overview</h3>
               <div style={{ marginTop: 10, padding: 12, background: 'rgba(255,255,255,0.06)', borderRadius: 10, border: '1px solid rgba(255,255,255,0.1)' }}>
-                <h4 style={{ color: '#f8fafc', fontSize: 14, marginBottom: 8 }}>Favorite Trips — Preise</h4>
+                <h4 style={{ color: '#f8fafc', fontSize: 14, marginBottom: 8 }}>Favorite Trips — Prices</h4>
                 <FavoriteTripPrices />
               </div>
             </section>
@@ -588,7 +588,7 @@ export default function App() {
                   body: JSON.stringify(body)
                 });
                 if (res.ok) {
-                  alert('Einstellungen gespeichert');
+                  alert('Settings saved');
                   setSettings({ fetch_max_months: body.fetch_max_months, scrape_delay_ms: body.scrape_delay_ms });
                 } else {
                   alert('Failed to save');
@@ -610,7 +610,7 @@ export default function App() {
                   marginTop: 8, padding: '10px 18px', borderRadius: 10, border: 'none',
                   background: 'linear-gradient(135deg, #38bdf8, #818cf8)',
                   color: '#0f172a', fontWeight: 700, fontSize: 15, cursor: 'pointer', alignSelf: 'flex-start'
-                }}>Speichern</button>
+                }}>Save</button>
               </form>
             </section>
           )}

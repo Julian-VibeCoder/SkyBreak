@@ -49,7 +49,7 @@ function ChartModal({ open, onClose, data }) {
         }}
         onClick={e => e.stopPropagation()}
       >
-        <h3 style={{ color: '#f8fafc', marginBottom: 10, fontSize: 18 }}>Preisverlauf</h3>
+        <h3 style={{ color: '#f8fafc', marginBottom: 10, fontSize: 18 }}>Price Trend</h3>
         <svg
           width="100%"
           height="240"
@@ -62,13 +62,13 @@ function ChartModal({ open, onClose, data }) {
               <polyline key="ret" points={chartPoints.map(p => `${p.x},${p.ret}`).join(' ')} fill="none" stroke="#f97316" strokeWidth="2"/>
               <polyline key="tot" points={chartPoints.map(p => `${p.x},${p.tot}`).join(' ')} fill="none" stroke="#10b981" strokeWidth="2"/>
               {/* X-Achse */}
-              <text x="300" y="230" textAnchor="middle" fill="#94a3b8" fontSize="10">Datum →</text>
+              <text x="300" y="230" textAnchor="middle" fill="#94a3b8" fontSize="10">Date →</text>
               {/* Y-Achse */}
-              <text x="18" y="125" textAnchor="start" fill="#94a3b8" fontSize="10" transform="rotate(-90 18 125)">Preis (€) ↑</text>
+              <text x="18" y="125" textAnchor="start" fill="#94a3b8" fontSize="10" transform="rotate(-90 18 125)">Price (€) ↑</text>
               {/* Legende unterhalb */}
-              <text x="580" y="235" textAnchor="end" fill="#38bdf8" fontSize="10">● Hin</text>
-              <text x="580" y="225" textAnchor="end" fill="#f97316" fontSize="10">● Rück</text>
-              <text x="580" y="215" textAnchor="end" fill="#10b981" fontSize="10">● Gesamt</text>
+              <text x="580" y="235" textAnchor="end" fill="#38bdf8" fontSize="10">● Outbound</text>
+              <text x="580" y="225" textAnchor="end" fill="#f97316" fontSize="10">● Return</text>
+              <text x="580" y="215" textAnchor="end" fill="#10b981" fontSize="10">● Total</text>
                 {/* Dynamic Y-Scale from data */}
                 {(() => {
                   const maxV = Math.max(...safeData.map(d => Math.max(d.total_price||0, d.outbound_price||0, d.return_price||0)));
@@ -87,12 +87,12 @@ function ChartModal({ open, onClose, data }) {
                 <line x1="30" y1="40" x2="30" y2="190" stroke="#334155" strokeWidth="1"/>
             </>
           ) : safeData.length === 0 ? (
-            <text x="300" y="130" textAnchor="middle" fill="#94a3b8" fontSize="14">Keine Daten</text>
+            <text x="300" y="130" textAnchor="middle" fill="#94a3b8" fontSize="14">No data</text>
           ) : null}
         </svg>
         <div style={{ marginTop: 8, color: '#e2e8f0', fontSize: 12 }}>
           {safeData.map(d => (
-            <div key={d.date} style={{ marginBottom: 2 }}>{d.date}: Hin {d.outbound_price} € | Rück {d.return_price} € | Gesamt {d.total_price} €</div>
+            <div key={d.date} style={{ marginBottom: 2 }}>{d.date}: Outbound {d.outbound_price} € | Return {d.return_price} € | Total {d.total_price} €</div>
           ))}
         </div>
         <button
@@ -108,7 +108,7 @@ function ChartModal({ open, onClose, data }) {
             cursor: 'pointer'
           }}
         >
-          Schließen
+          Close
         </button>
       </div>
     </div>
