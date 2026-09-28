@@ -47,7 +47,7 @@ def fetch_prices_favorite(favorite_id, force=False):
         latest_dep_hour = 20 if out_fnum_filter else None
         try:
             fd_out = FlightData(date=str(out_trip_date or trip_date), from_airport=Airport(airport=start_airport), to_airport=Airport(airport=dest_airport), max_stops=0, earliest_departure_hour=(earliest_dep_hour or 14), latest_departure_hour=(latest_dep_hour or 20))
-            q_out = Query(flight_data=[fd_out], trip="one-way", passengers=[Passengers(adults=1)], seat="economy")
+            q_out = Query(flight_data=[fd_out], trip="one-way", passengers=[Passengers(adults=1)], seat="economy", language="de", currency="EUR")
             result_out = get_flights(q_out)
         except Exception as e:
             logger.warning("fast-flights Hinflug Fehler: %s", e)
@@ -81,7 +81,7 @@ def fetch_prices_favorite(favorite_id, force=False):
             earliest_ret_hour = 14 if ret_fnum_filter else None
             latest_ret_hour = 20 if ret_fnum_filter else None
             fd_ret = FlightData(date=str(ret_trip_date or trip_date), from_airport=Airport(airport=dest_airport), to_airport=Airport(airport=start_airport), max_stops=0, earliest_departure_hour=(earliest_ret_hour or 14), latest_departure_hour=(latest_ret_hour or 20))
-            q_ret = Query(flight_data=[fd_ret], trip="one-way", passengers=[Passengers(adults=1)], seat="economy")
+            q_ret = Query(flight_data=[fd_ret], trip="one-way", passengers=[Passengers(adults=1)], seat="economy", language="de", currency="EUR")
             result_ret = get_flights(q_ret)
         except Exception as e:
             logger.warning("fast-flights Rückflug Fehler: %s", e)
