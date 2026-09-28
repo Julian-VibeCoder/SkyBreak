@@ -93,6 +93,17 @@ def migration_v5(conn):
     conn.execute("INSERT INTO db_version (version) VALUES (5)")
     logger.info("Applied migration v5")
 
+def migration_v6(conn):
+    try:
+        cols = {r[1] for r in conn.execute("PRAGMA table_info(favorite_trips)").fetchall()}
+    except:
+        cols = set()
+    if 'return_time' not in cols:
+        conn.execute("ALTER TABLE favorite_trips ADD COLUMN return_time TEXT")
+    conn.execute("DELETE FROM db_version")
+    conn.execute("INSERT INTO db_version (version) VALUES (6)")
+    logger.info("Applied migration v6")
+
 def apply_migrations():
     conn = sqlite3.connect(DB_FILE, timeout=30.0)
     current = get_current_version(conn)
@@ -110,6 +121,9 @@ def apply_migrations():
     current = get_current_version(conn)
     if current < 5:
         migration_v5(conn)
+    current = get_current_version(conn)
+    if current < 6:
+        migration_v6(conn)
     conn.execute("DELETE FROM settings WHERE key NOT IN (?, ?, ?, ?, ?)", ("scrape_delay_ms", "fetch_max_months", "fetch_max_days", "favorite_max_items", "google_consent_cookie"))
     conn.execute("INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)", ("google_consent_cookie", "CAESHAgBEhJnd3NfMjAyMzA4MTAtMF9SQzIaAmRlIAEaBgiAo_CmBg"))
     conn.commit()
