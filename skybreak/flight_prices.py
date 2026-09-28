@@ -95,9 +95,10 @@ def fetch_prices_favorite(favorite_id, force=False):
             price_ret = _get_exact_price(q_ret, ret_time)
         except Exception as e: logger.warning("Rückflug Fehler: %s", e)
         total = (price_out or 0)+(price_ret or 0) if (price_out is not None or price_ret is not None) else None
-        conn = sqlite3.connect(DB_PATH, timeout=30.0)
-        conn.execute("INSERT OR REPLACE INTO favorite_trip_prices (favorite_id, price_outbound, price_return, price_total, currency, fetched_at) VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)", (favorite_id, price_out, price_ret, total, "EUR"))
-        conn.commit(); conn.close()
+        if price_out is not None or price_ret is not None:
+            conn = sqlite3.connect(DB_PATH, timeout=30.0)
+            conn.execute("INSERT OR REPLACE INTO favorite_trip_prices (favorite_id, price_outbound, price_return, price_total, currency, fetched_at) VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)", (favorite_id, price_out, price_ret, total, "EUR"))
+            conn.commit(); conn.close()
         return {"favorite_id":favorite_id,"price_outbound":price_out,"price_return":price_ret,"price_total":total,"currency":"EUR","fetched_at":datetime.now().isoformat()}
     except Exception as e:
         logger.exception("Fehler %s: %s", favorite_id, e)
