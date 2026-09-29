@@ -3,3 +3,5 @@ node_modules
 *.db
 .tmp
 frontend/build/
+__pycache__/
+*.pyc
