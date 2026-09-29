@@ -248,9 +248,14 @@ def create_favorite():
     data = request.get_json() or {}
     conn = sqlite3.connect(DB_PATH, timeout=30.0)
     conn.execute("INSERT OR IGNORE INTO favorite_trips (destination_airport, outbound_flight_number, return_flight_number, start_airport, outbound_trip_date, return_trip_date) VALUES (?, ?, ?, ?, ?, ?)", (
-        data.get("destination_airport"), data.get("outbound_flight_number"), data.get("return_flight_number"),
-        data.get("start_airport"), data.get("outbound_trip_date"), data.get("return_trip_date")
+        data.get("destination_airport") or "",
+        data.get("outbound_flight_number") or "",
+        data.get("return_flight_number") or "",
+        data.get("start_airport") or "",
+        data.get("trip_date") or data.get("outbound_trip_date") or "",
+        data.get("return_trip_date") or ""
     ))
+    conn.commit()
     conn.close()
     return jsonify({"created": True}), 201
 
