@@ -336,17 +336,20 @@ export default function App() {
 
       <main style={{ flex: 1, padding: 36, overflow: 'auto' }}>
         <header style={{ marginBottom: 28, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <div>
-            <h2 style={{ margin: 0, fontSize: 28, fontWeight: 800, letterSpacing: '-0.8px' }}>
-              {NAV.find(n => n.key === tab)?.label}
-            </h2>
-            <p style={{ margin: '6px 0 0', color: '#94a3b8', fontSize: 14 }}>
-              {tab === 'airports' && 'Manage airport codes and view departures / arrivals.'}
-              {tab === 'flights' && 'Browse flight schedules by airport and date.'}
-              {tab === 'trips' && 'Plan trips and view itineraries.'}
-              {tab === 'prices' && 'Track travel expenses and budget overview.'}
-              {tab === 'settings' && 'Configure API key for flight data access.'}
-            </p>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+            <span style={{ fontSize: 34, lineHeight: 1 }}>✈️</span>
+            <div>
+              <h2 style={{ margin: 0, fontSize: 28, fontWeight: 800, letterSpacing: '-0.8px' }}>
+                Skybreak Travel Dashboard
+              </h2>
+              <p style={{ margin: '6px 0 0', color: '#94a3b8', fontSize: 14 }}>
+                {tab === 'airports' && 'Manage airport codes and view departures / arrivals.'}
+                {tab === 'flights' && 'Browse flight schedules by airport and date.'}
+                {tab === 'trips' && 'Plan trips and view itineraries.'}
+                {tab === 'prices' && 'Track travel expenses and budget overview.'}
+                {tab === 'settings' && 'Configure API key for flight data access.'}
+              </p>
+            </div>
           </div>
         </header>
 

@@ -9,7 +9,7 @@ export default function CollapsibleSidebar({ children, collapsed, onToggle }) {
         aria-label="Toggle sidebar"
         onClick={() => { const next = !innerCollapsed; setInnerCollapsed(next); if (onToggle) onToggle(next); }}
         style={{
-          position: 'absolute', top: 18, left: -22, zIndex: 50,
+          position: 'absolute', top: 18, right: -22, zIndex: 50,
           width: 44, height: 44, borderRadius: '50%', border: 'none',
           background: 'linear-gradient(135deg, #38bdf8, #818cf8)',
           color: '#0f172a', fontSize: 22, fontWeight: 800,
