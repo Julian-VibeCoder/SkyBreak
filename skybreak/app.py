@@ -428,12 +428,6 @@ def price_status():
     return jsonify({"running": running})
 
 @app.route("/api/turnarounds", methods=["GET"])
-
-@app.route("/api/turnarounds", methods=["GET"])
-
-
-@app.route("/api/prices", methods=["POST"])
-@app.route("/api/turnarounds", methods=["GET"])
 def find_short_trips():
     # Neuer Algorithmus: SQL-Filter + Two-Pointer/Hash-Join (Pseudocode-Implementierung)
     from datetime import datetime, timedelta, time
@@ -578,6 +572,34 @@ def find_short_trips():
                 item["is_favorite"] = True
                 break
     return jsonify({"turnarounds": ergebnisse, "count": len(ergebnisse), "algorithm": "sql_filter_hash_join"})
+
+@app.route("/api/prices/missing", methods=["POST"])
+def update_missing_prices():
+    global _price_in_progress
+    with _price_lock:
+        if _price_in_progress:
+            return jsonify({"updated": False, "message": "Preisaktualisierung bereits aktiv", "running": True}), 409
+        _price_in_progress = True
+    from skybreak.flight_prices import fetch_prices_favorite
+    import threading
+    def _run_missing():
+        global _price_in_progress
+        try:
+            conn = sqlite3.connect(DB_PATH, timeout=30.0)
+            rows = conn.execute("SELECT DISTINCT ft.id FROM favorite_trips ft LEFT JOIN favorite_trip_prices ftp ON ft.id = ftp.favorite_id WHERE ftp.id IS NULL OR ftp.price_outbound IS NULL OR ftp.price_return IS NULL").fetchall()
+            conn.close()
+            for (fav_id,) in rows:
+                try:
+                    fetch_prices_favorite(fav_id, force=True)
+                except Exception:
+                    pass
+        finally:
+            with _price_lock:
+                _price_in_progress = False
+    threading.Thread(target=_run_missing, daemon=True).start()
+    return jsonify({"updated": True, "running": True})
+
+
 
 if __name__ == "__main__":
     apply_migrations()

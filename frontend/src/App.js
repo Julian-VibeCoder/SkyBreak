@@ -30,6 +30,7 @@ function FavoriteTripPrices() {
   useEffect(() => { load(); let prevRunning = false; const iv = setInterval(() => { if (!pollActive) return; fetch('/api/prices/status').then(r=>r.json()).then(s=>{ if(s.running){setProgress(true); setPollActive(true);}else{setProgress(false); setPollActive(false); if(prevRunning && !s.running){ load(); } } prevRunning = !!s.running; }).catch(()=>{}); }, 1500); return () => clearInterval(iv); }, [pollActive]);
   if (!prices.length) return <p style={{ color: '#94a3b8', fontSize: 13 }}>No favorites yet.</p>;
   const handleUpdate = () => { if (updating || progress) return; setUpdating(true); setProgress(true); setPollActive(true); fetch('/api/prices', {method:'POST'}).then(r => r.json()).then(d => { if(d.updated) { setTimeout(load, 800); } else { setProgress(false); setPollActive(false); } }).catch(() => { setProgress(false); setPollActive(false); }).finally(() => setUpdating(false)); };
+  const handleUpdateMissing = () => { if (updating || progress) return; setUpdating(true); setProgress(true); setPollActive(true); fetch('/api/prices/missing', {method:'POST'}).then(r => r.json()).then(d => { if(d.updated) { setTimeout(load, 800); } else { setProgress(false); setPollActive(false); } }).catch(() => { setProgress(false); setPollActive(false); }).finally(() => setUpdating(false)); };
   const openChartFor = (tripId) => {
     const trip = prices.find(p => p.id === tripId || p.id == tripId);
     if (!trip) { setChartData([]); setChartOpen(true); return; }
@@ -70,8 +71,11 @@ function FavoriteTripPrices() {
           <input type="date" value={filterEnd} onChange={e => setFilterEnd(e.target.value)} style={{ padding:'5px 8px', borderRadius:6, border:'1px solid rgba(255,255,255,0.15)', background:'rgba(255,255,255,0.06)', color:'#f8fafc', fontSize:12 }} />
           <button onClick={() => { setFilterStart(''); setFilterEnd(''); }} style={{ padding:'5px 10px', borderRadius:6, border:'none', background:'#475569', color:'#f8fafc', fontSize:11, cursor:'pointer' }}>Clear</button>
         </div>
-        <button disabled={updating || progress} onClick={handleUpdate} style={{ padding: '6px 10px', borderRadius: 6, border: 'none', background: (updating || progress) ? '#475569' : '#38bdf8', color: '#0f172a', fontWeight: 700, fontSize: 12, cursor: (updating || progress) ? 'not-allowed' : 'pointer', marginBottom: 8 }}>
-          {progress || updating ? 'Updating prices... (running)' : 'Update prices'}
+        <button disabled={updating || progress} onClick={handleUpdate} style={{ padding: '6px 10px', borderRadius: 6, border: 'none', background: (updating || progress) ? '#475569' : '#f59e0b', color: '#0f172a', fontWeight: 700, fontSize: 12, cursor: (updating || progress) ? 'not-allowed' : 'pointer', marginBottom: 8, marginRight: 10 }}>
+          {progress || updating ? 'Updating prices... (running)' : 'Update all prices'}
+        </button>
+        <button disabled={updating || progress} onClick={handleUpdateMissing} style={{ padding: '6px 10px', borderRadius: 6, border: 'none', background: (updating || progress) ? '#475569' : '#38bdf8', color: '#0f172a', fontWeight: 700, fontSize: 12, cursor: (updating || progress) ? 'not-allowed' : 'pointer', marginBottom: 8 }}>
+          {progress || updating ? 'Updating prices... (running)' : 'Update missing prices'}
         </button>
         {groupKeys.map(key => {
           let grp = groupsObj[key];
