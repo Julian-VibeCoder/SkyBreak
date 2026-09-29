@@ -162,7 +162,14 @@ function FavoriteTrips() {
 
 export default function App() {
   const [tab, setTab] = useState('trips');
-  const [mobileNavHidden, setMobileNavHidden] = useState(false);
+  const [mobileNavHidden, setMobileNavHidden] = useState(typeof window !== 'undefined' ? window.innerWidth < 1024 : false);
+  useEffect(() => {
+    const handleResize = () => {
+      if (window.innerWidth < 1024) setMobileNavHidden(true);
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
   const [code, setCode] = useState('');
   const [list, setList] = useState([]);
   const [feedback, setFeedback] = useState('');
