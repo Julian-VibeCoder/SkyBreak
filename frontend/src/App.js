@@ -5,7 +5,7 @@ import ChartModal from './components/ChartModal';
 
 const NAV = [
   { key: 'trips', label: 'Trips', icon: '🧳' },
-  { key: 'prices', label: 'Prices', icon: '💰' },
+  { key: 'favorites', label: 'Favorites', icon: '⭐' },
   { key: 'airports', label: 'Airports', icon: '✈️' },
   { key: 'flights', label: 'Flights', icon: '🛫' },
   { key: 'settings', label: 'Settings', icon: '⚙️' },
@@ -89,7 +89,7 @@ function FavoriteTripPrices() {
             <div key={key} style={{ marginBottom: 10, border: '1px solid rgba(255,255,255,0.08)', borderRadius: 10, overflow: 'hidden' }}>
               <button onClick={() => toggle('price_' + key)} style={{ width: '100%', textAlign: 'left', padding: '10px 14px', background: 'rgba(255,255,255,0.06)', color: '#f8fafc', fontWeight: 700, fontSize: 14, border: 'none', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <span>{(grp[0]?.dest_city_country || key) + ' (' + key + ')'}</span>
-                <span style={{ color: '#38bdf8', fontWeight: 600, fontSize: 12 }}>Cheapest: {cheapestPrice}</span>
+                <span style={{ color: '#38bdf8', fontWeight: 600, fontSize: 12, marginLeft: 'auto', marginRight: 8 }}>Cheapest: {cheapestPrice}</span>
                 <span style={{ color: '#94a3b8', fontWeight: 500 }}>{isOpen ? '▲' : '▼'}</span>
               </button>
               {isOpen && (
@@ -226,7 +226,7 @@ export default function App() {
   useEffect(() => {
     if (tab === 'flights') loadFlights();
   }, [flightDate, tab]);
-  useEffect(() => { if (tab !== 'prices') return; let prevRunning = false; const iv = setInterval(() => { fetch('/api/prices/status').then(r=>r.json()).then(s=>{ if(s.running){ } else { if(prevRunning && !s.running){ window.dispatchEvent(new Event('price-update')); } } prevRunning = !!s.running; }).catch(()=>{}); }, 1500); return () => clearInterval(iv); }, [tab]);
+  useEffect(() => { if (tab !== 'favorites') return; let prevRunning = false; const iv = setInterval(() => { fetch('/api/prices/status').then(r=>r.json()).then(s=>{ if(s.running){ } else { if(prevRunning && !s.running){ window.dispatchEvent(new Event('price-update')); } } prevRunning = !!s.running; }).catch(()=>{}); }, 1500); return () => clearInterval(iv); }, [tab]);
   useEffect(() => {
     if (tab === 'flights') loadFlights();
           fetch('/api/airports').then(r => r.json()).then(data => {
@@ -368,11 +368,6 @@ export default function App() {
                 Skybreak Travel Dashboard
               </h2>
               <p style={{ margin: '6px 0 0', color: '#94a3b8', fontSize: 14 }}>
-                {tab === 'airports' && 'Manage airport codes and view departures / arrivals.'}
-                {tab === 'flights' && 'Browse flight schedules by airport and date.'}
-                {tab === 'trips' && 'Plan trips and view itineraries.'}
-                {tab === 'prices' && 'Track travel expenses and budget overview.'}
-                {tab === 'settings' && 'Configure API key for flight data access.'}
               </p>
             </div>
           </div>
@@ -608,7 +603,7 @@ export default function App() {
             </section>
           )}
 
-          {tab === 'prices' && (
+          {tab === 'favorites' && (
             <section style={{
               background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)',
               borderRadius: 18, padding: 24, boxShadow: '0 10px 30px rgba(0,0,0,0.2)'

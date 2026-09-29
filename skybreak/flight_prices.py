@@ -57,25 +57,31 @@ def _get_exact_price(q: Query, dep_time=None):
 def fetch_prices_favorite(favorite_id, force=False):
     try:
         conn = sqlite3.connect(DB_PATH, timeout=30.0)
-        row = conn.execute("SELECT trip_date, start_airport, destination_airport, outbound_trip_date, return_trip_date, return_time FROM favorite_trips WHERE id = ?", (favorite_id,)).fetchone()
+        row = conn.execute("SELECT id, start_airport, destination_airport, outbound_trip_date, return_trip_date, outbound_flight_number, return_flight_number FROM favorite_trips WHERE id = ?", (favorite_id,)).fetchone()
         conn.close()
         if not row: return {"favorite_id":favorite_id,"error":"Favorit nicht gefunden"}
-        trip_date, start_airport, dest_airport, out_trip_date, ret_trip_date, return_time_db = row
+        fav_id, start_airport, dest_airport, out_trip_date, ret_trip_date, out_fnum, ret_fnum = row
         if not start_airport or not dest_airport: return {"favorite_id":favorite_id,"error":"Flughafen fehlt"}
-        out_date, out_time = _split_date_time(out_trip_date or trip_date)
-        ret_date, _ret_time_from_date = _split_date_time(ret_trip_date or trip_date)
-        # Rückflug-Abflugzeit explizit aus Favorit-Spalte return_time bevorzugen
+        out_date = out_trip_date or ''
+        ret_date = ret_trip_date or ''
+        out_time = None
         ret_time = None
-        if return_time_db and isinstance(return_time_db, str) and ":" in str(return_time_db):
-            time_str = str(return_time_db).strip()
-            # Wenn nur Uhrzeit (z.B. 16:35) ohne Datum, mit ret_date kombinieren
-            if len(time_str) <= 5 and time_str.count(':') == 1:
-                combined = f"{ret_date or trip_date} {time_str}"
-                _, ret_time = _split_date_time(combined)
-            else:
-                _, ret_time = _split_date_time(str(return_time_db))
-        elif _ret_time_from_date:
-            ret_time = _ret_time_from_date
+        # Uhrzeiten immer aus flights-Tabelle lesen (Flugnummer + Datum)
+        try:
+            conn_f = sqlite3.connect(DB_PATH, timeout=30.0)
+            if out_fnum and out_date:
+                row_f = conn_f.execute("SELECT departure_time FROM flights WHERE flight_number = ? AND date(departure_time) = ? LIMIT 1", (str(out_fnum), out_date)).fetchone()
+                if row_f and row_f[0]:
+                    _, out_time = _split_date_time(str(row_f[0]))
+            if ret_fnum and ret_date:
+                row_f = conn_f.execute("SELECT departure_time FROM flights WHERE flight_number = ? AND date(departure_time) = ? LIMIT 1", (str(ret_fnum), ret_date)).fetchone()
+                if row_f and row_f[0]:
+                    _, ret_time = _split_date_time(str(row_f[0]))
+            conn_f.close()
+        except Exception as e:
+            logger.warning("Flug-Lookup Fehler: %s", e)
+            out_time = None
+            ret_time = None
         q_out = create_query(flights=[FlightQuery(date=out_date, from_airport=str(start_airport), to_airport=str(dest_airport), max_stops=0)], seat="economy", trip="one-way", passengers=Passengers(adults=1), language="de", currency="EUR")
         q_ret = create_query(flights=[FlightQuery(date=ret_date, from_airport=str(dest_airport), to_airport=str(start_airport), max_stops=0)], seat="economy", trip="one-way", passengers=Passengers(adults=1), language="de", currency="EUR")
         price_out = None

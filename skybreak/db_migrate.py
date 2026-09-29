@@ -175,6 +175,9 @@ def apply_migrations():
     current = get_current_version(conn)
     if current < 10:
         migration_v10(conn)
+    current = get_current_version(conn)
+    if current < 11:
+        migration_v11(conn)
     conn.execute("DELETE FROM settings WHERE key NOT IN (?, ?, ?, ?, ?)", ("scrape_delay_ms", "fetch_max_months", "fetch_max_days", "favorite_max_items", "google_consent_cookie"))
     conn.execute("INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)", ("google_consent_cookie", "CAESHAgBEhJnd3NfMjAyMzA4MTAtMF9SQzIaAmRlIAEaBgiAo_CmBg"))
     conn.commit()
@@ -183,3 +186,59 @@ def apply_migrations():
 
 if __name__ == "__main__":
     apply_migrations()
+
+def apply_migrations():
+    conn = sqlite3.connect(DB_FILE, timeout=30.0)
+    current = get_current_version(conn)
+    if current < 1:
+        migration_v1(conn)
+    current = get_current_version(conn)
+    if current < 2:
+        migration_v2(conn)
+    current = get_current_version(conn)
+    if current < 3:
+        migration_v3(conn)
+    current = get_current_version(conn)
+    if current < 4:
+        migration_v4(conn)
+    current = get_current_version(conn)
+    if current < 5:
+        migration_v5(conn)
+    current = get_current_version(conn)
+    if current < 6:
+        migration_v6(conn)
+    current = get_current_version(conn)
+    if current < 7:
+        migration_v7(conn)
+    current = get_current_version(conn)
+    if current < 8:
+        migration_v8(conn)
+    current = get_current_version(conn)
+    if current < 9:
+        migration_v9(conn)
+    current = get_current_version(conn)
+    if current < 10:
+        migration_v10(conn)
+    current = get_current_version(conn)
+    if current < 11:
+        migration_v11(conn)
+    conn.execute("DELETE FROM settings WHERE key NOT IN (?, ?, ?, ?, ?)", ("scrape_delay_ms", "fetch_max_months", "fetch_max_days", "favorite_max_items", "google_consent_cookie"))
+    conn.execute("INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)", ("google_consent_cookie", "CAESHAgBEhJnd3NfMjAyMzA4MTAtMF9SQzIaAmRlIAEaBgiAo_CmBg"))
+    conn.commit()
+    conn.close()
+    logger.info("DB at version %d", get_current_version(sqlite3.connect(DB_FILE, timeout=30.0)))
+
+if __name__ == "__main__":
+    apply_migrations()
+
+def migration_v11(conn):
+    try:
+        cols = {r[1] for r in conn.execute("PRAGMA table_info(favorite_trips)").fetchall()}
+        for col in ('start_time', 'return_time', 'trip_date'):
+            if col in cols:
+                conn.execute(f"ALTER TABLE favorite_trips DROP COLUMN {col}")
+        conn.execute("DELETE FROM db_version")
+        conn.execute("INSERT INTO db_version (version) VALUES (11)")
+        logger.info("Applied migration v11")
+    except Exception as e:
+        logger.warning("Migration v11 failed: %s", e)
