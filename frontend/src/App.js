@@ -44,6 +44,17 @@ function FavoriteTripPrices() {
   };
   const sorted = [...prices].sort((a,b) => {
     let av = a[sortKey], bv = b[sortKey];
+    if (sortKey === 'price_total') {
+      const avNull = av == null || av === undefined;
+      const bvNull = bv == null || bv === undefined;
+      if (avNull && bvNull) return 0;
+      if (avNull) return 1; // null immer am Ende
+      if (bvNull) return -1;
+      const n1 = Number(av), n2 = Number(bv);
+      if (n1 < n2) return sortDir === 'asc' ? -1 : 1;
+      if (n1 > n2) return sortDir === 'asc' ? 1 : -1;
+      return 0;
+    }
     if (av == null) av = -Infinity; if (bv == null) bv = -Infinity;
     if (typeof av === 'string') av = av.toLowerCase(); if (typeof bv === 'string') bv = bv.toLowerCase();
     if (av < bv) return sortDir === 'asc' ? -1 : 1;
@@ -104,7 +115,7 @@ function FavoriteTripPrices() {
                       <th style={{ textAlign: 'center', padding: '6px 8px', color: '#94a3b8', whiteSpace: 'nowrap', width: '18%' }}>Actions</th>
                     </tr></thead>
                     <tbody>
-                      {[...grp].sort((a,b) => { const dir = (grpSortDir['grp_' + key] || 'asc'); const sk = (grpSortKey['grp_' + key] || 'cost'); let av=a[sk], bv=b[sk]; if (sk==='cost') { av = a.price_total; bv = b.price_total; } else if (sk==='origin') { av = a.start_city_country||''; bv = b.start_city_country||''; } else if (sk==='outbound') { av = a.outbound_trip_date||a.trip_date||''; bv = b.outbound_trip_date||b.trip_date||''; } else if (sk==='return') { av = a.return_trip_date||a.trip_date||''; bv = b.return_trip_date||b.trip_date||''; } if (av == null) av = ''; if (bv == null) bv = ''; if (typeof av === 'string') av = av.toLowerCase(); if (typeof bv === 'string') bv = bv.toLowerCase(); if (av < bv) return dir === 'asc' ? -1 : 1; if (av > bv) return dir === 'asc' ? 1 : -1; return 0; }).map(f => (
+                      {[...grp].sort((a,b) => { const dir = (grpSortDir['grp_' + key] || 'asc'); const sk = (grpSortKey['grp_' + key] || 'cost'); let av=a[sk], bv=b[sk]; if (sk==='cost') { const aNull = a.price_total == null; const bNull = b.price_total == null; if (aNull && bNull) { av = bv = 0; } else if (aNull) { av = Infinity; bv = Number(b.price_total); } else if (bNull) { av = Number(a.price_total); bv = Infinity; } else { av = Number(a.price_total); bv = Number(b.price_total); } } else if (sk==='origin') { av = a.start_city_country||''; bv = b.start_city_country||''; } else if (sk==='outbound') { av = a.outbound_trip_date||a.trip_date||''; bv = b.outbound_trip_date||b.trip_date||''; } else if (sk==='return') { av = a.return_trip_date||a.trip_date||''; bv = b.return_trip_date||b.trip_date||''; } if (sk !== 'cost') { if (av == null) av = ''; if (bv == null) bv = ''; if (typeof av === 'string') av = av.toLowerCase(); if (typeof bv === 'string') bv = bv.toLowerCase(); } if (av < bv) return dir === 'asc' ? -1 : 1; if (av > bv) return dir === 'asc' ? 1 : -1; return 0; }).map(f => (
                         <tr key={f.id} style={{ background: 'rgba(255,255,255,0.03)', borderRadius: 8, borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
                           <td style={{ padding: '8px', color: '#f8fafc', fontWeight: 600, fontSize: 11, verticalAlign: 'top', wordBreak: 'break-word' }}>{f.start_city_country || '—'} <span style={{ color: '#94a3b8', fontSize: 10 }}>{f.start_airport || ''}</span></td>
                           <td style={{ padding: '8px', color: '#f8fafc', fontWeight: 600, fontSize: 11, verticalAlign: 'top', wordBreak: 'break-word' }}>
@@ -116,7 +127,8 @@ function FavoriteTripPrices() {
                             <div style={{ color: '#cbd5e1', fontSize: 10 }}>{f.return_flight || f.return_flight_number || '—'}</div>
                           </td>
                           <td style={{ padding: '8px', color: '#38bdf8', fontWeight: 700, fontSize: 11, verticalAlign: 'top', whiteSpace: 'nowrap' }}>
-                            <div>Total: {f.price_total != null ? f.price_total + ' €' : '—'}</div>
+                            <div>Total: {f.price_total != null ? f.price_total + ' €' : 'none / unavailable'}</div>
+                            <div style={{ fontSize: 9, color: '#cbd5e1' }}>{f.price_outbound != null ? 'Outbound: ' + f.price_outbound + ' €' : 'Outbound: —'} | {f.price_return != null ? 'Return: ' + f.price_return + ' €' : 'Return: —'}</div>
                             <div style={{ fontSize: 9, color: '#94a3b8' }}>(updated: {f.fetched_at ? new Date(f.fetched_at).toLocaleDateString() : '—'})</div>
                           </td>
                           <td style={{ padding: '8px', textAlign: 'center', verticalAlign: 'middle', whiteSpace: 'nowrap' }}>
