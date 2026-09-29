@@ -247,12 +247,10 @@ def settings():
 def create_favorite():
     data = request.get_json() or {}
     conn = sqlite3.connect(DB_PATH, timeout=30.0)
-    conn.execute("INSERT OR IGNORE INTO favorite_trips (trip_date, start_time, destination_airport, outbound_flight_number, return_flight_number, start_airport, outbound_trip_date, return_trip_date, return_time) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)", (
-        data.get("trip_date"), data.get("start_time"), data.get("destination_airport"),
-        data.get("outbound_flight_number"), data.get("return_flight_number"), data.get("start_airport"),
-        (data.get("outbound_trip_date") or data.get("trip_date")), (data.get("return_trip_date") or data.get("trip_date")), data.get("return_time")
+    conn.execute("INSERT OR IGNORE INTO favorite_trips (destination_airport, outbound_flight_number, return_flight_number, start_airport, outbound_trip_date, return_trip_date) VALUES (?, ?, ?, ?, ?, ?)", (
+        data.get("destination_airport"), data.get("outbound_flight_number"), data.get("return_flight_number"),
+        data.get("start_airport"), data.get("outbound_trip_date"), data.get("return_trip_date")
     ))
-    conn.commit()
     conn.close()
     return jsonify({"created": True}), 201
 
@@ -261,20 +259,20 @@ def create_favorite():
 @app.route("/api/favorites", methods=["GET"])
 def list_favorites():
     conn = sqlite3.connect(DB_PATH, timeout=30.0)
-    rows = conn.execute("SELECT id, trip_date, start_time, destination_airport, outbound_flight_number, return_flight_number, start_airport, created_at, outbound_trip_date, return_trip_date, return_time FROM favorite_trips ORDER BY created_at DESC").fetchall()
+    rows = conn.execute("SELECT id, destination_airport, outbound_flight_number, return_flight_number, start_airport, created_at, outbound_trip_date, return_trip_date FROM favorite_trips ORDER BY created_at DESC").fetchall()
     conn.close()
     from skybreak.flight_prices import get_prices_for_favorite
     result = []
     for r in rows:
         prices = get_prices_for_favorite(r[0]) or {}
         # Flugdaten für Hinflug und Rückflug suchen
-        trip_date = r[1] or ''
-        out_trip_date = r[8] or trip_date or ''
-        ret_trip_date = r[9] or trip_date or ''
-        start_airport = r[6] or ''
-        dest_airport = r[3] or ''
-        out_fnum = r[4] or ''
-        ret_fnum = r[5] or ''
+        dest_airport = r[1] or ''
+        out_fnum = r[2] or ''
+        ret_fnum = r[3] or ''
+        start_airport = r[4] or ''
+        created_at = r[5]
+        out_trip_date = r[6] or ''
+        ret_trip_date = r[7] or ''
         out_dep = out_arr = ret_dep = ret_arr = out_flight = ret_flight = None
         conn2 = sqlite3.connect(DB_PATH, timeout=30.0)
         try:
@@ -367,9 +365,9 @@ def list_favorites():
                 pass
         start_name = _cached_fetch_airport_name(start_airport) or start_airport or ""
         dest_name = _cached_fetch_airport_name(dest_airport) or dest_airport or ""
-        result.append({"id": r[0], "trip_date": r[1], "start_time": r[2], "destination_airport": r[3],
-                       "outbound_flight_number": r[4], "return_flight_number": r[5], "start_airport": r[6], "created_at": r[7],
-                                                "outbound_trip_date": r[8], "return_trip_date": r[9], "return_time": r[10],
+        result.append({"id": r[0], "destination_airport": r[1], "outbound_flight_number": r[2],
+                       "return_flight_number": r[3], "start_airport": r[4], "created_at": r[5],
+                                                "outbound_trip_date": r[6], "return_trip_date": r[7],
                        "price_outbound": prices.get("price_outbound"), "price_return": prices.get("price_return"),
                        "price_total": prices.get("price_total"), "currency": prices.get("currency"), "fetched_at": prices.get("fetched_at"),
                        "outbound_departure": out_dep, "outbound_arrival": out_arr, "outbound_flight": out_flight,
