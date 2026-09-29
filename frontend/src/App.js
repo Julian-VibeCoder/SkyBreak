@@ -332,7 +332,7 @@ export default function App() {
 
         <nav style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           {NAV.map(n => (
-            <a key={n.key} href={'/' + n.key} onClick={(e) => { if (e.ctrlKey || e.metaKey || e.button === 1) return; e.preventDefault(); setTab(n.key); window.history.pushState({}, '', '/' + n.key); }} style={{ textDecoration: 'none', color: 'inherit', display: 'block', width: '100%' }}>
+            <a key={n.key} href={'/' + n.key} onClick={(e) => { if (e.ctrlKey || e.metaKey || e.button === 1) return; e.preventDefault(); setTab(n.key); if (typeof window !== 'undefined' && window.innerWidth < 1024) setMobileNavHidden(true); window.history.pushState({}, '', '/' + n.key); }} style={{ textDecoration: 'none', color: 'inherit', display: 'block', width: '100%' }}>
               <button style={{
                 width: '100%', textAlign: 'left', padding: '12px 14px', borderRadius: 12, border: 'none',
                 background: tab === n.key ? 'rgba(56,189,248,0.15)' : 'transparent',
