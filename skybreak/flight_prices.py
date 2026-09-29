@@ -30,7 +30,15 @@ def fetch_prices_favorite(favorite_id, force=False):
                 price_ret = get_flight_price(str(dest_airport), str(start_airport), ret_date, str(ret_fnum))
             except Exception as e:
                 logger.warning("Rückflug Fehler: %s", e)
-        total = (price_out or 0) + (price_ret or 0) if (price_out is not None or price_ret is not None) else None
+        out_available = bool(out_date and out_fnum)
+        ret_available = bool(ret_date and ret_fnum)
+        out_has_price = price_out is not None
+        ret_has_price = price_ret is not None
+        # Wenn ein Flug eines Trips keinen Preis hat -> Gesamtpreis = none
+        if (out_available and not out_has_price) or (ret_available and not ret_has_price):
+            total = None
+        else:
+            total = (price_out or 0) + (price_ret or 0) if (price_out is not None or price_ret is not None) else None
         if price_out is not None or price_ret is not None:
             conn = sqlite3.connect(DB_PATH, timeout=30.0)
             conn.execute("INSERT OR REPLACE INTO favorite_trip_prices (favorite_id, price_outbound, price_return, price_total, currency, fetched_at) VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)", (favorite_id, price_out, price_ret, total, "EUR"))
