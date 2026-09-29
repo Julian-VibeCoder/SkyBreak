@@ -1,7 +1,20 @@
 import React, { useState, useEffect } from 'react';
 
 export default function CollapsibleSidebar({ children, collapsed, onToggle }) {
-  const [innerCollapsed, setInnerCollapsed] = useState(false);
+  const [innerCollapsed, setInnerCollapsed] = useState(typeof window !== 'undefined' ? window.innerWidth < 1024 : false);
+  const [isMobile, setIsMobile] = useState(typeof window !== 'undefined' ? window.innerWidth < 1024 : false);
+
+  useEffect(() => {
+    const handleResize = () => {
+      const mobile = window.innerWidth < 1024;
+      setIsMobile(mobile);
+      if (mobile) setInnerCollapsed(collapsed === true);
+    };
+    handleResize();
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, [collapsed]);
+
   useEffect(() => { if (typeof collapsed === 'boolean') setInnerCollapsed(collapsed); }, [collapsed]);
   return (
     <aside className={innerCollapsed ? 'collapsed' : ''} style={{ position: 'relative' }}>
