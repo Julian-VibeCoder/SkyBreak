@@ -20,6 +20,10 @@ function FavoriteTripPrices() {
   const [chartOpen, setChartOpen] = useState(false);
   const [chartData, setChartData] = useState(null);
   const [expanded, setExpanded] = useState({});
+  const [grpSortKey, setGrpSortKey] = useState({});
+  const [grpSortDir, setGrpSortDir] = useState({});
+  const [filterStart, setFilterStart] = useState('');
+  const [filterEnd, setFilterEnd] = useState('');
   const toggle = (k) => setExpanded(e => ({...e, [k]: !e[k]}));
   const load = () => { setLoading(true); fetch('/api/favorites').then(r => r.json()).then(d => { setPrices(Array.isArray(d) ? d : []); }).catch(() => setPrices([])).finally(() => setLoading(false)); };
   const [pollActive, setPollActive] = useState(true);
@@ -60,11 +64,20 @@ function FavoriteTripPrices() {
   return (
     <div>
         <h4 style={{ margin: '0 0 10px', fontSize: 16, fontWeight: 700, color: '#f8fafc', letterSpacing: 0.2 }}>Favorite Trips</h4>
+        <div style={{ display:'flex', gap: 10, flexWrap:'wrap', marginBottom: 10, alignItems:'center' }}>
+          <label style={{ color:'#94a3b8', fontSize:12 }}>Filter date range:</label>
+          <input type="date" value={filterStart} onChange={e => setFilterStart(e.target.value)} style={{ padding:'5px 8px', borderRadius:6, border:'1px solid rgba(255,255,255,0.15)', background:'rgba(255,255,255,0.06)', color:'#f8fafc', fontSize:12 }} />
+          <input type="date" value={filterEnd} onChange={e => setFilterEnd(e.target.value)} style={{ padding:'5px 8px', borderRadius:6, border:'1px solid rgba(255,255,255,0.15)', background:'rgba(255,255,255,0.06)', color:'#f8fafc', fontSize:12 }} />
+          <button onClick={() => { setFilterStart(''); setFilterEnd(''); }} style={{ padding:'5px 10px', borderRadius:6, border:'none', background:'#475569', color:'#f8fafc', fontSize:11, cursor:'pointer' }}>Clear</button>
+        </div>
         <button disabled={updating || progress} onClick={handleUpdate} style={{ padding: '6px 10px', borderRadius: 6, border: 'none', background: (updating || progress) ? '#475569' : '#38bdf8', color: '#0f172a', fontWeight: 700, fontSize: 12, cursor: (updating || progress) ? 'not-allowed' : 'pointer', marginBottom: 8 }}>
           {progress || updating ? 'Updating prices... (running)' : 'Update prices'}
         </button>
         {groupKeys.map(key => {
-          const grp = groupsObj[key];
+          let grp = groupsObj[key];
+          if (filterStart) grp = grp.filter(p => (p.outbound_trip_date || p.trip_date || '') >= filterStart);
+          if (filterEnd) grp = grp.filter(p => (p.outbound_trip_date || p.trip_date || '') <= filterEnd);
+          if (!grp.length) return null;
           const isOpen = !!expanded['price_' + key];
           const cheapest = grp.reduce((m, p) => (p.price_total != null && (m == null || p.price_total < m.price_total)) ? p : m, null);
           const cheapestPrice = cheapest && cheapest.price_total != null ? cheapest.price_total + ' €' : '—';
@@ -77,16 +90,17 @@ function FavoriteTripPrices() {
               </button>
               {isOpen && (
                 <div style={{ padding: 8 }}>
+                  <button onClick={async () => { if (!confirm('Delete all favorites in this group (matching filter)?')) return; for (const p of grp) { await fetch('/api/favorites/'+p.id, {method:'DELETE'}); } load(); }} style={{ padding:'5px 10px', borderRadius:6, border:'none', background:'#ef4444', color:'#fff', fontSize:11, fontWeight:700, cursor:'pointer', marginBottom:8 }}>Delete all in group</button>
                   <table style={{ width: '100%', minWidth: '720px', borderCollapse: 'separate', borderSpacing: '0 4px', fontSize: 12, tableLayout: 'fixed' }}>
                     <thead><tr style={{ borderBottom: '1px solid rgba(255,255,255,0.12)' }}>
-                      <th style={{ textAlign: 'left', padding: '6px 8px', color: '#94a3b8', whiteSpace: 'nowrap', width: '18%' }}>Origin</th>
-                      <th style={{ textAlign: 'left', padding: '6px 8px', color: '#94a3b8', whiteSpace: 'nowrap', width: '22%' }}>Outbound</th>
-                      <th style={{ textAlign: 'left', padding: '6px 8px', color: '#94a3b8', whiteSpace: 'nowrap', width: '22%' }}>Return</th>
-                      <th style={{ textAlign: 'left', padding: '6px 8px', color: '#94a3b8', whiteSpace: 'nowrap', width: '20%' }}>Cost</th>
+                      <th style={{ textAlign: 'left', padding: '6px 8px', color: '#94a3b8', whiteSpace: 'nowrap', width: '18%' }}><button onClick={() => { const dir = grpSortDir['grp_' + key] === 'asc' ? 'desc' : 'asc'; grpSortDir['grp_' + key] = dir; grpSortKey['grp_' + key] = 'origin'; }} style={{ background:'none', border:'none', color:'#f8fafc', fontWeight:700, fontSize:11, cursor:'pointer', padding:0, textAlign:'left' }}>Origin {grpSortKey['grp_' + key] === 'origin' ? (grpSortDir['grp_' + key] === 'asc' ? '▲' : '▼') : ''}</button></th>
+                      <th style={{ textAlign: 'left', padding: '6px 8px', color: '#94a3b8', whiteSpace: 'nowrap', width: '22%' }}><button onClick={() => { const dir = grpSortDir['grp_' + key] === 'asc' ? 'desc' : 'asc'; grpSortDir['grp_' + key] = dir; grpSortKey['grp_' + key] = 'outbound'; }} style={{ background:'none', border:'none', color:'#f8fafc', fontWeight:700, fontSize:11, cursor:'pointer', padding:0, textAlign:'left' }}>Outbound {grpSortKey['grp_' + key] === 'outbound' ? (grpSortDir['grp_' + key] === 'asc' ? '▲' : '▼') : ''}</button></th>
+                      <th style={{ textAlign: 'left', padding: '6px 8px', color: '#94a3b8', whiteSpace: 'nowrap', width: '22%' }}><button onClick={() => { const dir = grpSortDir['grp_' + key] === 'asc' ? 'desc' : 'asc'; grpSortDir['grp_' + key] = dir; grpSortKey['grp_' + key] = 'return'; }} style={{ background:'none', border:'none', color:'#f8fafc', fontWeight:700, fontSize:11, cursor:'pointer', padding:0, textAlign:'left' }}>Return {grpSortKey['grp_' + key] === 'return' ? (grpSortDir['grp_' + key] === 'asc' ? '▲' : '▼') : ''}</button></th>
+                      <th style={{ textAlign: 'left', padding: '6px 8px', color: '#94a3b8', whiteSpace: 'nowrap', width: '20%' }}><button onClick={() => { const dir = grpSortDir['grp_' + key] === 'asc' ? 'desc' : 'asc'; grpSortDir['grp_' + key] = dir; grpSortKey['grp_' + key] = 'cost'; }} style={{ background:'none', border:'none', color:'#f8fafc', fontWeight:700, fontSize:11, cursor:'pointer', padding:0, textAlign:'left' }}>Cost {grpSortKey['grp_' + key] === 'cost' ? (grpSortDir['grp_' + key] === 'asc' ? '▲' : '▼') : ''}</button></th>
                       <th style={{ textAlign: 'center', padding: '6px 8px', color: '#94a3b8', whiteSpace: 'nowrap', width: '18%' }}>Actions</th>
                     </tr></thead>
                     <tbody>
-                      {grp.map(f => (
+                      {[...grp].sort((a,b) => { const dir = (grpSortDir['grp_' + key] || 'asc'); const sk = (grpSortKey['grp_' + key] || 'cost'); let av=b[sk], bv=a[sk]; if (sk==='cost') { av = a.price_total; bv = b.price_total; } else if (sk==='origin') { av = a.start_city_country||''; bv = b.start_city_country||''; } else if (sk==='outbound') { av = a.outbound_trip_date||a.trip_date||''; bv = b.outbound_trip_date||b.trip_date||''; } else if (sk==='return') { av = a.return_trip_date||a.trip_date||''; bv = b.return_trip_date||b.trip_date||''; } if (av == null) av = ''; if (bv == null) bv = ''; if (typeof av === 'string') av = av.toLowerCase(); if (typeof bv === 'string') bv = bv.toLowerCase(); if (av < bv) return dir === 'asc' ? -1 : 1; if (av > bv) return dir === 'asc' ? 1 : -1; return 0; }).map(f => (
                         <tr key={f.id} style={{ background: 'rgba(255,255,255,0.03)', borderRadius: 8, borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
                           <td style={{ padding: '8px', color: '#f8fafc', fontWeight: 600, fontSize: 11, verticalAlign: 'top', wordBreak: 'break-word' }}>{f.start_city_country || '—'} <span style={{ color: '#94a3b8', fontSize: 10 }}>{f.start_airport || ''}</span></td>
                           <td style={{ padding: '8px', color: '#f8fafc', fontWeight: 600, fontSize: 11, verticalAlign: 'top', wordBreak: 'break-word' }}>
