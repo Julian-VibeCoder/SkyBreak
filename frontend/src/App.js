@@ -162,7 +162,14 @@ function FavoriteTrips() {
 
 export default function App() {
   const [tab, setTab] = useState('trips');
-  const [mobileNavHidden, setMobileNavHidden] = useState(false);
+  const [mobileNavHidden, setMobileNavHidden] = useState(typeof window !== 'undefined' ? window.innerWidth < 1024 : false);
+  useEffect(() => {
+    const handleResize = () => {
+      if (window.innerWidth < 1024) setMobileNavHidden(true);
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
   const [code, setCode] = useState('');
   const [list, setList] = useState([]);
   const [feedback, setFeedback] = useState('');
@@ -540,12 +547,12 @@ export default function App() {
                   <input type="time" value={minRetDep} onChange={e => setMinRetDep(e.target.value)} style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.15)', background: 'rgba(255,255,255,0.06)', color: '#f8fafc', fontSize: 14, boxSizing: 'border-box', maxWidth: '100%' }} />
                 </div>
                 <div style={{ background: 'rgba(255,255,255,0.03)', borderRadius: 14, padding: 16, border: '1px solid rgba(255,255,255,0.06)' }}>
-                  <label style={{ fontSize: 12, fontWeight: 600, color: '#f8fafc', display: 'block', marginBottom: 6 }}>Max Trip Length (days)</label>
-                  <input type="number" min={1} max={30} value={maxTripDays} onChange={e => setMaxTripDays(parseInt(e.target.value) || 1)} style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.15)', background: 'rgba(255,255,255,0.06)', color: '#f8fafc', fontSize: 14, boxSizing: 'border-box', maxWidth: '100%' }} />
-                </div>
-                <div style={{ background: 'rgba(255,255,255,0.03)', borderRadius: 14, padding: 16, border: '1px solid rgba(255,255,255,0.06)' }}>
                   <label style={{ fontSize: 12, fontWeight: 600, color: '#f8fafc', display: 'block', marginBottom: 6 }}>Min Trip Length (days)</label>
                   <input type="number" min={1} max={30} value={minTripDays} onChange={e => setMinTripDays(parseInt(e.target.value) || 1)} style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.15)', background: 'rgba(255,255,255,0.06)', color: '#f8fafc', fontSize: 14, boxSizing: 'border-box', maxWidth: '100%' }} />
+                </div>
+                <div style={{ background: 'rgba(255,255,255,0.03)', borderRadius: 14, padding: 16, border: '1px solid rgba(255,255,255,0.06)' }}>
+                  <label style={{ fontSize: 12, fontWeight: 600, color: '#f8fafc', display: 'block', marginBottom: 6 }}>Max Trip Length (days)</label>
+                  <input type="number" min={1} max={30} value={maxTripDays} onChange={e => setMaxTripDays(parseInt(e.target.value) || 1)} style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.15)', background: 'rgba(255,255,255,0.06)', color: '#f8fafc', fontSize: 14, boxSizing: 'border-box', maxWidth: '100%' }} />
                 </div>
               </div>
               <div style={{ marginBottom: 14, display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
