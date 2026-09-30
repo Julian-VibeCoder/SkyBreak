@@ -491,7 +491,7 @@ def find_short_trips():
     hinfluege_rows = conn.execute(sql_hin, (flughafen or '', zeitraum_von + ' 00:00:00', zeitraum_bis + ' 23:59:59', spaeteste_hinzeit)).fetchall()
 
     # 2. SQL-Abfrage Rückflüge (von Ziel zurück zum Startflughafen)
-    zeitraum_bis_dt = datetime.strptime(zeitraum_bis, '%Y-%m-%d') + timedelta(days=max_dauer_tage)
+    zeitraum_bis_dt = datetime.strptime(zeitraum_bis, '%Y-%m-%d')  # end gilt auch für Rückflug
     zeitraum_bis_rueck_str = zeitraum_bis_dt.strftime('%Y-%m-%d')
     sql_rueck = f"""SELECT id, from_icao AS start_flughafen, flight_number, departure_time AS abflug_zeit
                      FROM flights
