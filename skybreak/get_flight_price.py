@@ -4,7 +4,7 @@ Aufruf:
     from flight_price import get_flight_price
     get_flight_price("ARN", "FRA", "2026-10-04", "LH805")  # -> 183.0 oder None
 """
-import json, logging, os, re, sqlite3
+import json, logging, os, random, re, sqlite3, threading, time
 
 from fast_flights import FlightQuery, Passengers, create_query
 from primp import Client
@@ -14,7 +14,17 @@ logger = logging.getLogger(__name__)
 DB_PATH = os.environ.get("DB_FILE", "/data/skybreak.db")
 FLIGHTS_URL = "https://www.google.com/travel/flights"
 
+# Backoff bei 429: 15 s, 45 s, 2:15, 6:45, ~20 min, dann 60 min (je ±20 % Jitter)
+BACKOFF_BASE = 15.0
+BACKOFF_FACTOR = 3.0
+BACKOFF_MAX = 3600.0
+MAX_RATE_LIMIT_RETRIES = 8  # pro Aufruf; danach RuntimeError
+
 _client = None
+# Globaler Cooldown: gilt für alle Aufrufe, damit die Batch-Schleife nicht weiterhämmert
+_rl_lock = threading.Lock()
+_blocked_until = 0.0     # time.monotonic()
+_consecutive_429 = 0     # wird erst nach erfolgreichem Request zurückgesetzt
 
 def _load_cookie():
     try:
@@ -35,6 +45,49 @@ def _get_client():
         else:
             logger.info("Kein Cookie in DB")
     return _client
+
+def _retry_after_seconds(res):
+    """Retry-After-Header in Sekunden (nur Zahlenform), sonst None."""
+    try:
+        value = res.headers.get("retry-after") or res.headers.get("Retry-After")
+        return max(0.0, float(value)) if value else None
+    except (AttributeError, TypeError, ValueError):
+        return None
+
+def _wait_for_cooldown():
+    with _rl_lock:
+        remaining = _blocked_until - time.monotonic()
+    if remaining > 0:
+        logger.info("Rate-Limit-Cooldown aktiv, warte %.0f s", remaining)
+        time.sleep(remaining)
+
+def _register_rate_limit(res):
+    """Cooldown verlängern (exponentiell über aufeinanderfolgende 429) und Session verwerfen."""
+    global _blocked_until, _consecutive_429, _client
+    with _rl_lock:
+        _consecutive_429 += 1
+        delay = min(BACKOFF_MAX, BACKOFF_BASE * BACKOFF_FACTOR ** (_consecutive_429 - 1))
+        delay *= random.uniform(0.8, 1.2)
+        retry_after = _retry_after_seconds(res)
+        if retry_after is not None:
+            delay = max(delay, retry_after)
+        _blocked_until = max(_blocked_until, time.monotonic() + delay)
+        _client = None  # neue Session/Cookies beim nächsten Versuch
+        logger.warning("Rate-Limit von Google (%d. in Folge), Cooldown %.0f s", _consecutive_429, delay)
+
+def _fetch(params):
+    """GET mit globalem Cooldown und Backoff bei 429 / Google-'sorry'-Seite. Blockiert ggf. lange."""
+    global _consecutive_429
+    for _ in range(MAX_RATE_LIMIT_RETRIES + 1):
+        _wait_for_cooldown()
+        res = _get_client().get(FLIGHTS_URL, params=params)
+        if res.status_code == 429 or "/sorry/" in str(res.url):
+            _register_rate_limit(res)
+            continue
+        with _rl_lock:
+            _consecutive_429 = 0
+        return res
+    raise RuntimeError(f"Rate-Limit: nach {MAX_RATE_LIMIT_RETRIES} Wiederholungen weiterhin HTTP 429")
 
 def _normalize_flight_number(value):
     """'LH805' / 'lh 0805' -> ('LH', '805')."""
@@ -65,12 +118,13 @@ def get_flight_price(from_airport, to_airport, date, flight_number):
     """Günstigster Economy-Preis (EUR, 1 Erwachsener) für einen Direktflug.
 
     date: 'YYYY-MM-DD'. Gibt None zurück, wenn der Flug nicht im Suchergebnis ist.
-    Wirft RuntimeError bei HTTP-Fehlern oder Consent-Seite.
+    Wirft RuntimeError bei HTTP-Fehlern oder Consent-Seite. Bei Rate-Limit (429) wird
+    intern mit Backoff gewartet und wiederholt; der Aufruf kann dann lange blockieren.
     """
     carrier, number = _normalize_flight_number(flight_number)
     wanted_date = [int(p) for p in date.split("-")]
     q = create_query(flights=[FlightQuery(date=date, from_airport=from_airport.upper(), to_airport=to_airport.upper(), max_stops=0)], seat="economy", trip="one-way", passengers=Passengers(adults=1), language="de", currency="EUR")
-    res = _get_client().get(FLIGHTS_URL, params=q.params())
+    res = _fetch(q.params())
     if res.status_code != 200:
         raise RuntimeError(f"HTTP {res.status_code}")
     if "consent.google.com" in str(res.url):
