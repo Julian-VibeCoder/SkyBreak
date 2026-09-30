@@ -26,7 +26,7 @@ function FavoriteTripPrices() {
   const [filterEnd, setFilterEnd] = useState('');
   const toggle = (k) => setExpanded(e => ({...e, [k]: !e[k]}));
   const load = () => { setLoading(true); fetch('/api/favorites').then(r => r.json()).then(d => { setPrices(Array.isArray(d) ? d : []); }).catch(() => setPrices([])).finally(() => setLoading(false)); };
-  const [pollActive, setPollActive] = useState(true);
+  const [pollActive, setPollActive] = useState(false);
   useEffect(() => { load(); let prevRunning = false; const iv = setInterval(() => { if (!pollActive) return; fetch('/api/prices/status').then(r=>r.json()).then(s=>{ if(s.running){setProgress(true); setPollActive(true);}else{setProgress(false); setPollActive(false); if(prevRunning && !s.running){ load(); } } prevRunning = !!s.running; }).catch(()=>{}); }, 1500); return () => clearInterval(iv); }, [pollActive]);
   if (!prices.length) return <p style={{ color: '#94a3b8', fontSize: 13 }}>No favorites yet.</p>;
   const handleUpdate = () => { if (updating || progress) return; setUpdating(true); setProgress(true); setPollActive(true); fetch('/api/prices', {method:'POST'}).then(r => r.json()).then(d => { if(d.updated) { setTimeout(load, 800); } else { setProgress(false); setPollActive(false); } }).catch(() => { setProgress(false); setPollActive(false); }).finally(() => setUpdating(false)); };
@@ -238,10 +238,9 @@ export default function App() {
   useEffect(() => {
     if (tab === 'flights') loadFlights();
   }, [flightDate, tab]);
-  useEffect(() => { if (tab !== 'favorites') return; let prevRunning = false; const iv = setInterval(() => { fetch('/api/prices/status').then(r=>r.json()).then(s=>{ if(s.running){ } else { if(prevRunning && !s.running){ window.dispatchEvent(new Event('price-update')); } } prevRunning = !!s.running; }).catch(()=>{}); }, 1500); return () => clearInterval(iv); }, [tab]);
+
   useEffect(() => {
-    if (tab === 'flights') loadFlights();
-          fetch('/api/airports').then(r => r.json()).then(data => {
+    fetch('/api/airports').then(r => r.json()).then(data => {
       const codes = Array.isArray(data) ? data.map(c => typeof c === 'string' ? c : c.code || c) : [];
       setList(codes);
       const nameMap = {};
@@ -252,7 +251,6 @@ export default function App() {
       });
       setAirportNames(nameMap);
     }).catch(() => setList([]));
-    loadFlights();
     // Only call scrape-status as long as it is true (running)
     const check = () => {
       fetch('/api/flights/scrape-status').then(r => r.json()).then(d => {
