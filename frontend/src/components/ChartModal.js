@@ -2,6 +2,24 @@ import React, { useState, useEffect } from 'react';
 
 function ChartModal({ open, onClose, data }) {
   const [chartPoints, setChartPoints] = useState([]);
+  const [dataPointsOpen, setDataPointsOpen] = useState(false);
+
+  const parseDate = (s) => {
+    if (!s) return null;
+    const str = String(s).trim();
+    if (str.includes('-')) {
+      const [y, m, d] = str.split('-').map(Number);
+      if (y && m && d) return new Date(y, m - 1, d).getTime();
+    }
+    if (str.includes('.')) {
+      const parts = str.split('.');
+      if (parts.length === 3) {
+        const [d, m, y] = parts.map(Number);
+        if (y && m && d) return new Date(y, m - 1, d).getTime();
+      }
+    }
+    return null;
+  };
 
   useEffect(() => {
     if (!open) return;
@@ -9,13 +27,22 @@ function ChartModal({ open, onClose, data }) {
     const maxVal = safeData.length > 0
       ? Math.max(...safeData.map(d => Math.max(d.total_price || 0, d.outbound_price || 0, d.return_price || 0))) || 1
       : 1;
-    const pts = safeData.map((d, i) => ({
-      x: 60 + (i / Math.max(1, safeData.length - 1)) * 500,
-      out: 30 + 150 - ((d.outbound_price || 0) / maxVal) * 130,
-      ret: 30 + 150 - ((d.return_price || 0) / maxVal) * 130,
-      tot: 30 + 150 - ((d.total_price || 0) / maxVal) * 130,
-      d
-    }));
+    const times = safeData.map(d => parseDate(d.date));
+    const validTimes = times.filter(t => t != null);
+    const minT = validTimes.length ? Math.min(...validTimes) : 0;
+    const maxT = validTimes.length ? Math.max(...validTimes) : 0;
+    const range = Math.max(1, maxT - minT);
+    const pts = safeData.map((d, i) => {
+      const t = times[i] != null ? times[i] : minT + (i / Math.max(1, safeData.length - 1)) * range;
+      const nx = safeData.length <= 1 ? 310 : 60 + ((t - minT) / range) * 500;
+      return {
+        x: nx,
+        out: 30 + 150 - ((d.outbound_price || 0) / maxVal) * 130,
+        ret: 30 + 150 - ((d.return_price || 0) / maxVal) * 130,
+        tot: 30 + 150 - ((d.total_price || 0) / maxVal) * 130,
+        d
+      };
+    });
     setChartPoints(pts);
   }, [open, data]);
 
@@ -105,9 +132,9 @@ function ChartModal({ open, onClose, data }) {
               <text x="300" y="245" textAnchor="middle" fill="#94a3b8" fontSize="10">Only one price entry available</text>
             )}
 
-            {safeData.map((d, i) => (
-              <text key={"x"+i} x={60 + (i / Math.max(1, safeData.length - 1)) * 500} y={isSingle ? 165 : 245} textAnchor="middle" fill="#94a3b8" fontSize="10" fontWeight="500">
-                {d.date ? String(d.date).split("-")[2] + ".." + String(d.date).split("-")[1] : '-'}
+            {chartPoints.map((p, i) => (
+              <text key={"x"+i} x={p.x} y={isSingle ? 165 : 245} textAnchor="middle" fill="#94a3b8" fontSize="10" fontWeight="500">
+                {p.d.date ? String(p.d.date).split("-")[2] + ".." + String(p.d.date).split("-")[1] : '-'}
               </text>
             ))}
 
@@ -127,19 +154,24 @@ function ChartModal({ open, onClose, data }) {
         </div>
 
         <div style={{ marginTop: 14, background: '#111827', padding: 12, borderRadius: 10, border: '1px solid rgba(148,163,184,0.1)' }}>
-          <h4 style={{ margin: '0 0 8px', fontSize: 13, fontWeight: 700, color: '#e2e8f0' }}>Data Points</h4>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 8 }}>
-            {safeData.map(d => (
-              <div key={d.date} style={{ background: '#0b1220', padding: '8px 10px', borderRadius: 8, border: '1px solid rgba(148,163,184,0.08)' }}>
-                <div style={{ color: '#cbd5e1', fontWeight: 600, fontSize: 12 }}>{d.date ? String(d.date) : '—'}</div>
-                <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 2 }}>
-                  Outbound <span style={{ color: '#38bdf8', fontWeight: 600 }}>{d.outbound_price ?? '—'} €</span> · Return <span style={{ color: '#f97316', fontWeight: 600 }}>{d.return_price ?? '—'} €</span> · Total <span style={{ color: '#10b981', fontWeight: 700 }}>{d.total_price ?? '—'} €</span>
+          <button onClick={() => setDataPointsOpen(o => !o)} style={{ width: '100%', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}>
+            <h4 style={{ margin: 0, fontSize: 13, fontWeight: 700, color: '#e2e8f0' }}>Data Points</h4>
+            <span style={{ color: '#94a3b8', fontSize: 14, fontWeight: 700 }}>{dataPointsOpen ? '−' : '+'}</span>
+          </button>
+          {dataPointsOpen && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 10 }}>
+              {safeData.map((d, idx) => (
+                <div key={d.date + '-' + idx} style={{ background: '#0b1220', padding: '8px 10px', borderRadius: 8, border: '1px solid rgba(148,163,184,0.08)' }}>
+                  <div style={{ color: '#cbd5e1', fontWeight: 600, fontSize: 12 }}>{d.date ? String(d.date) : '—'}</div>
+                  <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 2 }}>
+                    Outbound <span style={{ color: '#38bdf8', fontWeight: 600 }}>{d.outbound_price ?? '—'} €</span> · Return <span style={{ color: '#f97316', fontWeight: 600 }}>{d.return_price ?? '—'} €</span> · Total <span style={{ color: '#10b981', fontWeight: 700 }}>{d.total_price ?? '—'} €</span>
+                  </div>
                 </div>
-              </div>
-            ))}
-          </div>
-          {safeData.length === 0 && (
-            <div style={{ color: '#94a3b8', fontSize: 12, padding: 10 }}>No price history available for this trip.</div>
+              ))}
+              {safeData.length === 0 && (
+                <div style={{ color: '#94a3b8', fontSize: 12, padding: 10 }}>No price history available for this trip.</div>
+              )}
+            </div>
           )}
         </div>
       </div>
