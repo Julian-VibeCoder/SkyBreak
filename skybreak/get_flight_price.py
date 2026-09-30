@@ -5,6 +5,7 @@ Aufruf:
     get_flight_price("ARN", "FRA", "2026-10-04", "LH805")  # -> 183.0 oder None
 """
 import json, logging, os, random, re, sqlite3, threading, time
+from collections import OrderedDict
 
 from fast_flights import FlightQuery, Passengers, create_query
 from primp import Client
@@ -25,6 +26,12 @@ _client = None
 _rl_lock = threading.Lock()
 _blocked_until = 0.0     # time.monotonic()
 _consecutive_429 = 0     # wird erst nach erfolgreichem Request zurückgesetzt
+
+# Cache der Suchergebnisse pro (from, to, date): mehrere Flugnummern derselben Suche -> 1 Request
+CACHE_MAX_ENTRIES = 500
+CACHE_TTL = 3600.0
+_cache = OrderedDict()   # key -> (time.monotonic(), Preistabelle); älteste zuerst
+_cache_lock = threading.Lock()
 
 def _load_cookie():
     try:
@@ -114,37 +121,59 @@ def _iter_entries(payload):
         if block and block[0]:
             yield from block[0]
 
-def get_flight_price(from_airport, to_airport, date, flight_number):
-    """Günstigster Economy-Preis (EUR, 1 Erwachsener) für einen Direktflug.
-
-    date: 'YYYY-MM-DD'. Gibt None zurück, wenn der Flug nicht im Suchergebnis ist.
-    Wirft RuntimeError bei HTTP-Fehlern oder Consent-Seite. Bei Rate-Limit (429) wird
-    intern mit Backoff gewartet und wiederholt; der Aufruf kann dann lange blockieren.
-    """
-    carrier, number = _normalize_flight_number(flight_number)
-    wanted_date = [int(p) for p in date.split("-")]
-    q = create_query(flights=[FlightQuery(date=date, from_airport=from_airport.upper(), to_airport=to_airport.upper(), max_stops=0)], seat="economy", trip="one-way", passengers=Passengers(adults=1), language="de", currency="EUR")
+def _search(from_airport, to_airport, date):
+    q = create_query(flights=[FlightQuery(date=date, from_airport=from_airport, to_airport=to_airport, max_stops=0)], seat="economy", trip="one-way", passengers=Passengers(adults=1), language="de", currency="EUR")
     res = _fetch(q.params())
     if res.status_code != 200:
         raise RuntimeError(f"HTTP {res.status_code}")
     if "consent.google.com" in str(res.url):
         raise RuntimeError("Google Consent-Seite erhalten (SOCS-Cookie fehlt/ungültig)")
-    payload = _load_payload(res.text)
-    if payload is None:
-        return None
-    prices = []
-    for k in _iter_entries(payload):
+    return _load_payload(res.text)
+
+def _extract_prices(payload):
+    """Suchergebnis -> {(carrier, number, (y, m, d)): günstigster Preis} für alle Direktflüge."""
+    prices = {}
+    for k in _iter_entries(payload or []):
         try:
             segments = k[0][2]
             if len(segments) != 1:
                 continue
             seg = segments[0]
             # seg[22] = ["LH", "805", None, "Lufthansa"], seg[20] = [2026, 10, 4]
-            if seg[22][0].upper() != carrier or seg[22][1].lstrip("0") != number or list(seg[20]) != wanted_date:
-                continue
+            key = (seg[22][0].upper(), seg[22][1].lstrip("0"), tuple(seg[20]))
             price = k[1][0][1]
             if price is not None:
-                prices.append(float(price))
+                prices[key] = min(float(price), prices.get(key, float("inf")))
         except (IndexError, TypeError, AttributeError) as e:
             logger.debug("Eintrag übersprungen: %s", e)
-    return min(prices) if prices else None
+    return prices
+
+def _get_prices(from_airport, to_airport, date):
+    """Preistabelle aus dem Cache (max. CACHE_TTL alt) oder frisch von Google. Fehler werden nicht gecacht."""
+    key = (from_airport, to_airport, date)
+    with _cache_lock:
+        hit = _cache.get(key)
+        if hit and time.monotonic() - hit[0] < CACHE_TTL:
+            _cache.move_to_end(key)
+            logger.debug("Cache-Treffer %s", key)
+            return hit[1]
+    prices = _extract_prices(_search(from_airport, to_airport, date))
+    with _cache_lock:
+        _cache[key] = (time.monotonic(), prices)
+        _cache.move_to_end(key)
+        while len(_cache) > CACHE_MAX_ENTRIES:
+            _cache.popitem(last=False)
+    return prices
+
+def get_flight_price(from_airport, to_airport, date, flight_number):
+    """Günstigster Economy-Preis (EUR, 1 Erwachsener) für einen Direktflug.
+
+    date: 'YYYY-MM-DD'. Gibt None zurück, wenn der Flug nicht im Suchergebnis ist.
+    Wirft RuntimeError bei HTTP-Fehlern oder Consent-Seite. Bei Rate-Limit (429) wird
+    intern mit Backoff gewartet und wiederholt; der Aufruf kann dann lange blockieren.
+    Suchergebnisse werden pro Route/Datum bis zu 1 h zwischengespeichert (max. 500 Einträge).
+    """
+    carrier, number = _normalize_flight_number(flight_number)
+    wanted_date = tuple(int(p) for p in date.split("-"))
+    prices = _get_prices(from_airport.upper(), to_airport.upper(), date)
+    return prices.get((carrier, number, wanted_date))
