@@ -43,6 +43,8 @@ def init_db():
     except sqlite3.OperationalError:
         pass  # column may not exist yet
     conn.execute("CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT)")
+    conn.execute("INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)", ("price_fetch_interval_hours", "6"))
+    conn.execute("INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)", ("fetch_max_months", "3"))
     conn.commit()
     conn.close()
 

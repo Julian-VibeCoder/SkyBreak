@@ -127,9 +127,9 @@ def start_price_scheduler():
         return
     try:
         scheduler = BackgroundScheduler()
-        scheduler.add_job(scrape_favorite_prices, "interval", minutes=interval, id="price_scheduler", coalesce=True, max_instances=1)
+        scheduler.add_job(scrape_favorite_prices, "interval", hours=interval, id="price_scheduler", coalesce=True, max_instances=1)
         scheduler.start()
-        logger.info("Preis-Scheduler gestartet: %d Minuten", interval)
+        logger.info("Preis-Scheduler gestartet: %d Stunden", interval)
     except Exception as e:
         logger.error("Preis-Scheduler konnte nicht gestartet werden: %s", e)
 
