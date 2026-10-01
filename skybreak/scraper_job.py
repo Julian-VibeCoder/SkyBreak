@@ -117,27 +117,49 @@ def scrape_all_airports():
 
 def start_price_scheduler():
     from apscheduler.schedulers.background import BackgroundScheduler
-    try: interval = int(get_setting("price_fetch_interval_hours") or "6")
-    except: interval = 6
-    if interval == 0: logger.info("Preis-Scheduler disabled"); return
-    interval = max(1, min(interval, 168)) * 60  # in Minuten
-    scheduler = BackgroundScheduler()
-    scheduler.add_job(scrape_favorite_prices, "interval", minutes=interval)
-    scheduler.start()
-    logger.info("Preis-Scheduler gestartet: %d Minuten", interval)
+    try: 
+        interval = int(get_setting("price_fetch_interval_hours") or "6")
+    except Exception as e:
+        logger.error("Fehler beim Lesen des Preis-Intervalls: %s", e)
+        interval = 6
+    if interval <= 0: 
+        logger.info("Preis-Scheduler deaktiviert (intervall <= 0)")
+        return
+    try:
+        scheduler = BackgroundScheduler()
+        scheduler.add_job(scrape_favorite_prices, "interval", minutes=interval, id="price_scheduler", coalesce=True, max_instances=1)
+        scheduler.start()
+        logger.info("Preis-Scheduler gestartet: %d Minuten", interval)
+    except Exception as e:
+        logger.error("Preis-Scheduler konnte nicht gestartet werden: %s", e)
 
 def scrape_favorite_prices():
     """Preise aller favorisierten Trips abfragen."""
+    logger.info("Starting automatic price update for all favorites")
     try:
         conn = sqlite3.connect(DB_PATH, timeout=30.0)
         rows = conn.execute("SELECT id FROM favorite_trips").fetchall()
         conn.close()
+        logger.info("Found %d favorite trips to update", len(rows))
+        if not rows:
+            logger.info("No favorite trips found, skipping price update")
+            return
         from skybreak.flight_prices import fetch_prices_favorite
+        success_count = 0
+        fail_count = 0
         for (fav_id,) in rows:
             try:
-                fetch_prices_favorite(fav_id, force=True)
+                result = fetch_prices_favorite(fav_id, force=True)
+                if "error" in result:
+                    logger.warning("Preis-Update Favorit %s fehlgeschlagen: %s", fav_id, result.get("error"))
+                    fail_count += 1
+                else:
+                    logger.debug("Preis-Update Favorit %s erfolgreich: %s", fav_id, result.get("price_total"))
+                    success_count += 1
             except Exception as e:
                 logger.warning("Preis-Update Favorit %s fehlgeschlagen: %s", fav_id, e)
+                fail_count += 1
+        logger.info("Preis-Update abgeschlossen: %d erfolgreich, %d fehlgeschlagen", success_count, fail_count)
     except Exception as e:
         logger.warning("Preis-Scheduler Fehler: %s", e)
 

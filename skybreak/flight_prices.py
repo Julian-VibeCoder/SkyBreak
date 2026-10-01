@@ -12,9 +12,11 @@ def fetch_prices_favorite(favorite_id, force=False):
         row = conn.execute("SELECT id, start_airport, destination_airport, outbound_trip_date, return_trip_date, outbound_flight_number, return_flight_number FROM favorite_trips WHERE id = ?", (favorite_id,)).fetchone()
         conn.close()
         if not row:
+            logger.warning("Favorit nicht gefunden: %s", favorite_id)
             return {"favorite_id": favorite_id, "error": "Favorit nicht gefunden"}
         fav_id, start_airport, dest_airport, out_trip_date, ret_trip_date, out_fnum, ret_fnum = row
         if not start_airport or not dest_airport:
+            logger.warning("Flughafen fehlt für Favorit %s: start=%s, dest=%s", favorite_id, start_airport, dest_airport)
             return {"favorite_id": favorite_id, "error": "Flughafen fehlt"}
         out_date = out_trip_date or ""
         ret_date = ret_trip_date or ""
@@ -24,12 +26,12 @@ def fetch_prices_favorite(favorite_id, force=False):
             try:
                 price_out = get_flight_price(str(start_airport), str(dest_airport), out_date, str(out_fnum))
             except Exception as e:
-                logger.warning("Hinflug Fehler: %s", e)
+                logger.warning("Hinflug Fehler für Favorit %s: %s", favorite_id, e)
         if ret_date and ret_fnum:
             try:
                 price_ret = get_flight_price(str(dest_airport), str(start_airport), ret_date, str(ret_fnum))
             except Exception as e:
-                logger.warning("Rückflug Fehler: %s", e)
+                logger.warning("Rückflug Fehler für Favorit %s: %s", favorite_id, e)
         out_available = bool(out_date and out_fnum)
         ret_available = bool(ret_date and ret_fnum)
         out_has_price = price_out is not None
@@ -44,9 +46,10 @@ def fetch_prices_favorite(favorite_id, force=False):
             conn.execute("INSERT OR REPLACE INTO favorite_trip_prices (favorite_id, price_outbound, price_return, price_total, currency, fetched_at) VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)", (favorite_id, price_out, price_ret, total, "EUR"))
             conn.commit()
             conn.close()
+        logger.debug("Preis-Update Favorit %s abgeschlossen: out=%s, ret=%s, total=%s", favorite_id, price_out, price_ret, total)
         return {"favorite_id": favorite_id, "price_outbound": price_out, "price_return": price_ret, "price_total": total, "currency": "EUR", "fetched_at": datetime.now().isoformat()}
     except Exception as e:
-        logger.exception("Fehler %s: %s", favorite_id, e)
+        logger.exception("Fehler bei Preis-Update für Favorit %s: %s", favorite_id, e)
         return {"favorite_id": favorite_id, "error": str(e)}
 
 def get_prices_for_favorite(favorite_id):
