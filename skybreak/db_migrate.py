@@ -1,7 +1,31 @@
-"""Streamlined DB migration: version saved in db, steps per schema change, applied at startup."""
-import sqlite3, os, logging
+"""Streamlined DB migration: version saved in the db, one step per schema
+change, applied at container startup.
+
+Rules:
+  * Schema version is stored in the ``db_version`` table.
+  * Every schema change is its own migration step and increases the version.
+  * Runtime uses only this module (``apply_migrations``); no separate init scripts.
+"""
+import logging
+import os
+import sqlite3
+
 logger = logging.getLogger(__name__)
 DB_FILE = os.environ.get("DB_FILE", "/data/skybreak.db")
+
+# Settings that are safe to keep across restarts; everything else is purged so
+# stale/renamed keys don't linger in the settings table.
+SETTINGS_WHITELIST = (
+    "scrape_delay_ms",
+    "fetch_max_months",
+    "fetch_max_days",
+    "favorite_max_items",
+    "google_consent_cookie",
+    "price_fetch_interval_hours",
+)
+
+GOOGLE_CONSENT_COOKIE = "CAESHAgBEhJnd3NfMjAyMzA4MTAtMF9SQzIaAmRlIAEaBgiAo_CmBg"
+
 
 def get_current_version(conn):
     try:
@@ -10,235 +34,212 @@ def get_current_version(conn):
     except sqlite3.OperationalError:
         return 0
 
+
+def _bump(conn, version):
+    conn.execute("DELETE FROM db_version")
+    conn.execute("INSERT INTO db_version (version) VALUES (?)", (version,))
+    logger.info("Applied migration v%d", version)
+
+
+def _favorite_cols(conn):
+    try:
+        return {r[1] for r in conn.execute("PRAGMA table_info(favorite_trips)").fetchall()}
+    except sqlite3.OperationalError:
+        return set()
+
+
+def _drop_indexes_referencing(conn, table, columns):
+    """Drop every index on `table` that references any of `columns`."""
+    import re
+    try:
+        rows = conn.execute(
+            "SELECT name, sql FROM sqlite_master WHERE type='index' AND tbl_name=?",
+            (table,),
+        ).fetchall()
+    except sqlite3.OperationalError:
+        rows = []
+    for idx_name, idx_sql in rows:
+        sql = idx_sql or ""
+        if any(re.search(rf"\b{re.escape(col)}\b", sql) for col in columns):
+            conn.execute(f"DROP INDEX IF EXISTS {idx_name}")
+
+
+
 def migration_v1(conn):
     conn.execute("CREATE TABLE IF NOT EXISTS airports (id INTEGER PRIMARY KEY AUTOINCREMENT, code TEXT UNIQUE NOT NULL, name TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)")
     conn.execute("CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT)")
-    # Check if flights exists with full schema; if missing columns, rebuild
+    # Rebuild the flights table if it has a partial/legacy schema.
     try:
         cols = {r[1] for r in conn.execute("PRAGMA table_info(flights)").fetchall()}
-    except:
+    except sqlite3.OperationalError:
         cols = set()
-    full_flights_cols = {"id","airport_icao","airport_name","destination_icao","destination_name","flight_direction","departure_time","arrival_time","duration_minutes","flight_number","from_icao","to_icao","created_at"}
-    if cols and not full_flights_cols.issubset(cols):
-        # Partial schema: rebuild
+    full = {"id", "airport_icao", "airport_name", "destination_icao", "destination_name",
+            "flight_direction", "departure_time", "arrival_time", "duration_minutes",
+            "flight_number", "from_icao", "to_icao", "created_at"}
+    flights_ddl = ("CREATE TABLE flights (id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                   "airport_icao TEXT, airport_name TEXT, destination_icao TEXT, "
+                   "destination_name TEXT, flight_direction TEXT, departure_time TEXT, "
+                   "arrival_time TEXT, duration_minutes INTEGER, flight_number TEXT, "
+                   "from_icao TEXT, to_icao TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)")
+    if cols and not full.issubset(cols):
         conn.execute("ALTER TABLE flights RENAME TO flights_old")
-        conn.execute("CREATE TABLE flights (id INTEGER PRIMARY KEY AUTOINCREMENT, airport_icao TEXT, airport_name TEXT, destination_icao TEXT, destination_name TEXT, flight_direction TEXT, departure_time TEXT, arrival_time TEXT, duration_minutes INTEGER, flight_number TEXT, from_icao TEXT, to_icao TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)")
+        conn.execute(flights_ddl)
         try:
-            conn.execute("INSERT INTO flights (airport_icao, airport_name, destination_icao, destination_name, flight_direction, departure_time, arrival_time, duration_minutes, flight_number, from_icao, to_icao, created_at) SELECT airport_icao, airport_name, destination_icao, destination_name, flight_direction, departure_time, arrival_time, duration_minutes, flight_number, from_icao, to_icao, CURRENT_TIMESTAMP FROM flights_old")
-        except Exception:
+            common = [c for c in
+                     ("airport_icao", "airport_name", "destination_icao", "destination_name",
+                      "flight_direction", "departure_time", "arrival_time", "duration_minutes",
+                      "flight_number", "from_icao", "to_icao")
+                     if c in cols]
+            common_str = ", ".join(common) if common else "airport_icao"
+            conn.execute(
+                f"INSERT INTO flights ({common_str}, created_at) "
+                f"SELECT {common_str}, CURRENT_TIMESTAMP FROM flights_old")
+        except sqlite3.Error:
             pass
         conn.execute("DROP TABLE flights_old")
     else:
-        conn.execute("CREATE TABLE IF NOT EXISTS flights (id INTEGER PRIMARY KEY AUTOINCREMENT, airport_icao TEXT, airport_name TEXT, destination_icao TEXT, destination_name TEXT, flight_direction TEXT, departure_time TEXT, arrival_time TEXT, duration_minutes INTEGER, flight_number TEXT, from_icao TEXT, to_icao TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)")
-        # If table exists but missing created_at specifically
-        if 'created_at' not in cols:
-            conn.execute("ALTER TABLE flights RENAME TO flights_old")
-            conn.execute("CREATE TABLE flights (id INTEGER PRIMARY KEY AUTOINCREMENT, airport_icao TEXT, airport_name TEXT, destination_icao TEXT, destination_name TEXT, flight_direction TEXT, departure_time TEXT, arrival_time TEXT, duration_minutes INTEGER, flight_number TEXT, from_icao TEXT, to_icao TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)")
-            try:
-                common = [r[1] for r in conn.execute("PRAGMA table_info(flights_old)").fetchall() if r[1] != 'id']
-                common_str = ", ".join(common) if common else "airport_icao"
-                conn.execute(f"INSERT INTO flights ({common_str}, created_at) SELECT {common_str}, CURRENT_TIMESTAMP FROM flights_old")
-            except Exception:
-                pass
-            conn.execute("DROP TABLE flights_old")
+        conn.execute(flights_ddl.replace("CREATE TABLE flights", "CREATE TABLE IF NOT EXISTS flights"))
     conn.execute("CREATE INDEX IF NOT EXISTS idx_flights_airport ON flights (airport_icao, departure_time)")
-    conn.execute("CREATE INDEX IF NOT EXISTS idx_fluege_matching ON flights(airport_icao, to_icao, departure_time)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_fluege_matching ON flights (airport_icao, to_icao, departure_time)")
     conn.execute("CREATE TABLE IF NOT EXISTS db_version (version INTEGER PRIMARY KEY)")
-    conn.execute("DELETE FROM db_version")
-    conn.execute("INSERT INTO db_version (version) VALUES (1)")
-    logger.info("Applied migration v1")
+    _bump(conn, 1)
 
 
 def migration_v2(conn):
     conn.execute("CREATE TABLE IF NOT EXISTS favorite_trips (id INTEGER PRIMARY KEY AUTOINCREMENT, trip_date TEXT, start_time TEXT, destination_airport TEXT, outbound_flight_number TEXT, return_flight_number TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, start_airport TEXT)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_favorite_trips_date ON favorite_trips (trip_date)")
-    conn.execute("DELETE FROM db_version")
-    conn.execute("INSERT INTO db_version (version) VALUES (2)")
-    logger.info("Applied migration v2")
+    _bump(conn, 2)
+
 
 def migration_v3(conn):
-    # Favorit: separate Daten für Hin- und Rückflug
-    try:
-        cols = {r[1] for r in conn.execute("PRAGMA table_info(favorite_trips)").fetchall()}
-    except:
-        cols = set()
-    if 'outbound_trip_date' not in cols:
-        conn.execute("ALTER TABLE favorite_trips ADD COLUMN outbound_trip_date TEXT")
-    if 'return_trip_date' not in cols:
-        conn.execute("ALTER TABLE favorite_trips ADD COLUMN return_trip_date TEXT")
-    if 'start_airport' not in cols:
-        conn.execute("ALTER TABLE favorite_trips ADD COLUMN start_airport TEXT")
-    conn.execute("DELETE FROM db_version")
-    conn.execute("INSERT INTO db_version (version) VALUES (3)")
-    logger.info("Applied migration v3")
+    cols = _favorite_cols(conn)
+    for col in ("outbound_trip_date", "return_trip_date", "start_airport"):
+        if col not in cols:
+            conn.execute(f"ALTER TABLE favorite_trips ADD COLUMN {col} TEXT")
+    _bump(conn, 3)
+
 
 def migration_v4(conn):
     conn.execute("CREATE TABLE IF NOT EXISTS favorite_trip_prices (favorite_id INTEGER, price_outbound REAL, price_return REAL, price_total REAL, currency TEXT, fetched_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_favorite_prices ON favorite_trip_prices (favorite_id, fetched_at)")
-    conn.execute("DELETE FROM db_version")
-    conn.execute("INSERT INTO db_version (version) VALUES (4)")
-    logger.info("Applied migration v4")
+    _bump(conn, 4)
+
 
 def migration_v5(conn):
-    # Ensure separate Hin-/Rückflug-Daten existieren (nach v3)
-    try:
-        cols = {r[1] for r in conn.execute("PRAGMA table_info(favorite_trips)").fetchall()}
-    except:
-        cols = set()
-    if 'outbound_trip_date' not in cols:
+    cols = _favorite_cols(conn)
+    if "outbound_trip_date" not in cols:
         conn.execute("ALTER TABLE favorite_trips ADD COLUMN outbound_trip_date TEXT")
-    if 'return_trip_date' not in cols:
+    if "return_trip_date" not in cols:
         conn.execute("ALTER TABLE favorite_trips ADD COLUMN return_trip_date TEXT")
-    conn.execute("DELETE FROM db_version")
-    conn.execute("INSERT INTO db_version (version) VALUES (5)")
-    logger.info("Applied migration v5")
+    _bump(conn, 5)
+
 
 def migration_v6(conn):
-    try:
-        cols = {r[1] for r in conn.execute("PRAGMA table_info(favorite_trips)").fetchall()}
-    except:
-        cols = set()
-    if 'return_time' not in cols:
+    cols = _favorite_cols(conn)
+    if "return_time" not in cols:
         conn.execute("ALTER TABLE favorite_trips ADD COLUMN return_time TEXT")
-    conn.execute("DELETE FROM db_version")
-    conn.execute("INSERT INTO db_version (version) VALUES (6)")
-    logger.info("Applied migration v6")
+    _bump(conn, 6)
+
 
 def migration_v7(conn):
-    # Prevent duplicate favorites via unique index (only if all columns present)
-    try:
-        cols = {r[1] for r in conn.execute("PRAGMA table_info(favorite_trips)").fetchall()}
-        needed = ['trip_date','start_time','destination_airport','outbound_flight_number','return_flight_number','start_airport','outbound_trip_date','return_trip_date','return_time']
-        if all(c in cols for c in needed):
-            conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_favorite_unique ON favorite_trips (trip_date, start_time, destination_airport, outbound_flight_number, return_flight_number, start_airport, outbound_trip_date, return_trip_date, return_time)")
-    except Exception:
-        pass
-    conn.execute("DELETE FROM db_version")
-    conn.execute("INSERT INTO db_version (version) VALUES (7)")
-    logger.info("Applied migration v7")
+    cols = _favorite_cols(conn)
+    needed = ["trip_date", "start_time", "destination_airport", "outbound_flight_number",
+              "return_flight_number", "start_airport", "outbound_trip_date",
+              "return_trip_date", "return_time"]
+    if all(c in cols for c in needed):
+        conn.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_favorite_unique ON favorite_trips "
+            "(trip_date, start_time, destination_airport, outbound_flight_number, "
+            "return_flight_number, start_airport, outbound_trip_date, return_trip_date, return_time)"
+        )
+    _bump(conn, 7)
+
 
 def migration_v8(conn):
     conn.execute("DROP TABLE IF EXISTS price_history")
-    conn.execute("DELETE FROM db_version")
-    conn.execute("INSERT INTO db_version (version) VALUES (8)")
-    logger.info("Applied migration v8")
-
+    _bump(conn, 8)
 
 
 def migration_v9(conn):
-    # Index für price-history Abfrage (favorite_id + fetched_at ASC) und DESC-Order
     conn.execute("CREATE INDEX IF NOT EXISTS idx_favorite_prices_fav_fetched_asc ON favorite_trip_prices (favorite_id, fetched_at ASC)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_favorite_prices_fav_fetched_desc ON favorite_trip_prices (favorite_id, fetched_at DESC)")
-    # Index für favorite_trips id-Query (fetch_prices_favorite)
     conn.execute("CREATE INDEX IF NOT EXISTS idx_favorite_trips_id ON favorite_trips (id)")
-    conn.execute("DELETE FROM db_version")
-    conn.execute("INSERT INTO db_version (version) VALUES (9)")
-    logger.info("Applied migration v9")
+    _bump(conn, 9)
 
 
 def migration_v10(conn):
     conn.execute("CREATE INDEX IF NOT EXISTS idx_flights_fnum_date ON flights (flight_number, date(departure_time))")
-    conn.execute("DELETE FROM db_version")
-    conn.execute("INSERT INTO db_version (version) VALUES (10)")
-    logger.info("Applied migration v10")
+    _bump(conn, 10)
 
-
-def apply_migrations():
-    conn = sqlite3.connect(DB_FILE, timeout=30.0)
-    current = get_current_version(conn)
-    if current < 1:
-        migration_v1(conn)
-    current = get_current_version(conn)
-    if current < 2:
-        migration_v2(conn)
-    current = get_current_version(conn)
-    if current < 3:
-        migration_v3(conn)
-    current = get_current_version(conn)
-    if current < 4:
-        migration_v4(conn)
-    current = get_current_version(conn)
-    if current < 5:
-        migration_v5(conn)
-    current = get_current_version(conn)
-    if current < 6:
-        migration_v6(conn)
-    current = get_current_version(conn)
-    if current < 7:
-        migration_v7(conn)
-    current = get_current_version(conn)
-    if current < 8:
-        migration_v8(conn)
-    current = get_current_version(conn)
-    if current < 9:
-        migration_v9(conn)
-    current = get_current_version(conn)
-    if current < 10:
-        migration_v10(conn)
-    current = get_current_version(conn)
-    if current < 11:
-        migration_v11(conn)
-    conn.execute("DELETE FROM settings WHERE key NOT IN (?, ?, ?, ?, ?)", ("scrape_delay_ms", "fetch_max_months", "fetch_max_days", "favorite_max_items", "google_consent_cookie"))
-    conn.execute("INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)", ("google_consent_cookie", "CAESHAgBEhJnd3NfMjAyMzA4MTAtMF9SQzIaAmRlIAEaBgiAo_CmBg"))
-    conn.commit()
-    conn.close()
-    logger.info("DB at version %d", get_current_version(sqlite3.connect(DB_FILE, timeout=30.0)))
-
-if __name__ == "__main__":
-    apply_migrations()
-
-def apply_migrations():
-    conn = sqlite3.connect(DB_FILE, timeout=30.0)
-    current = get_current_version(conn)
-    if current < 1:
-        migration_v1(conn)
-    current = get_current_version(conn)
-    if current < 2:
-        migration_v2(conn)
-    current = get_current_version(conn)
-    if current < 3:
-        migration_v3(conn)
-    current = get_current_version(conn)
-    if current < 4:
-        migration_v4(conn)
-    current = get_current_version(conn)
-    if current < 5:
-        migration_v5(conn)
-    current = get_current_version(conn)
-    if current < 6:
-        migration_v6(conn)
-    current = get_current_version(conn)
-    if current < 7:
-        migration_v7(conn)
-    current = get_current_version(conn)
-    if current < 8:
-        migration_v8(conn)
-    current = get_current_version(conn)
-    if current < 9:
-        migration_v9(conn)
-    current = get_current_version(conn)
-    if current < 10:
-        migration_v10(conn)
-    current = get_current_version(conn)
-    if current < 11:
-        migration_v11(conn)
-    conn.execute("DELETE FROM settings WHERE key NOT IN (?, ?, ?, ?, ?)", ("scrape_delay_ms", "fetch_max_months", "fetch_max_days", "favorite_max_items", "google_consent_cookie"))
-    conn.execute("INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)", ("google_consent_cookie", "CAESHAgBEhJnd3NfMjAyMzA4MTAtMF9SQzIaAmRlIAEaBgiAo_CmBg"))
-    conn.commit()
-    conn.close()
-    logger.info("DB at version %d", get_current_version(sqlite3.connect(DB_FILE, timeout=30.0)))
-
-if __name__ == "__main__":
-    apply_migrations()
 
 def migration_v11(conn):
+    """Drop the legacy per-trip time/date columns that are no longer used.
+
+    SQLite cannot drop a column that is part of an index, so drop every index on
+    ``favorite_trips`` that references those columns first, drop the columns, then
+    rebuild the unique index on the surviving columns. Wrapped so a partial/older
+    state never leaves a half-migrated table.
+    """
+    cols = _favorite_cols(conn)
+    if not cols:
+        _bump(conn, 11)
+        return
     try:
-        cols = {r[1] for r in conn.execute("PRAGMA table_info(favorite_trips)").fetchall()}
-        for col in ('start_time', 'return_time', 'trip_date'):
+        to_drop = ("start_time", "return_time", "trip_date")
+        _drop_indexes_referencing(conn, "favorite_trips", to_drop)
+        for col in to_drop:
             if col in cols:
                 conn.execute(f"ALTER TABLE favorite_trips DROP COLUMN {col}")
-        conn.execute("DELETE FROM db_version")
-        conn.execute("INSERT INTO db_version (version) VALUES (11)")
-        logger.info("Applied migration v11")
-    except Exception as e:
-        logger.warning("Migration v11 failed: %s", e)
+        # Rebuild the unique index on the columns that still exist.
+        remaining = [c for c in
+                     ("destination_airport", "outbound_flight_number", "return_flight_number",
+                      "start_airport", "outbound_trip_date", "return_trip_date")
+                     if c in cols]
+        if remaining:
+            conn.execute(
+                "CREATE UNIQUE INDEX IF NOT EXISTS idx_favorite_unique ON favorite_trips "
+                f"({', '.join(remaining)})"
+            )
+        conn.commit()
+    except sqlite3.Error as e:
+        conn.rollback()
+        logger.warning("Migration v11 partially applied, retrying next start: %s", e)
+        return
+    _bump(conn, 11)
+
+
+MIGRATIONS = [
+    migration_v1, migration_v2, migration_v3, migration_v4, migration_v5,
+    migration_v6, migration_v7, migration_v8, migration_v9, migration_v10,
+    migration_v11,
+]
+
+
+def apply_migrations():
+    conn = sqlite3.connect(DB_FILE, timeout=30.0)
+    try:
+        current = get_current_version(conn)
+        for step_no, migrate in enumerate(MIGRATIONS, start=1):
+            if current < step_no:
+                migrate(conn)
+                # Commit each step so a failure in a later step cannot undo the
+                # schema created by earlier steps.
+                conn.commit()
+                current = get_current_version(conn)
+        placeholders = ", ".join("?" * len(SETTINGS_WHITELIST))
+        conn.execute(
+            f"DELETE FROM settings WHERE key NOT IN ({placeholders})",
+            SETTINGS_WHITELIST,
+        )
+        conn.execute(
+            "INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)",
+            ("google_consent_cookie", GOOGLE_CONSENT_COOKIE),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+    logger.info("DB at version %d", get_current_version(sqlite3.connect(DB_FILE, timeout=30.0)))
+
+
+if __name__ == "__main__":
+    apply_migrations()

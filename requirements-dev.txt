@@ -1,0 +1,4 @@
+-r requirements.txt
+
+# Test-only dependencies (kept out of the runtime image)
+pytest

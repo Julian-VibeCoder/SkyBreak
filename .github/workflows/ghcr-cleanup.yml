@@ -21,7 +21,9 @@ jobs:
         uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
+          # The scheduled event exposes no actor identity; a fixed username works
+          # fine with the GITHUB_TOKEN.
+          username: 'x-access-token'
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Setup jq
@@ -32,28 +34,34 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPO: ${{ github.repository }}
         run: |
-          # GH package versions endpoint: /repos/{owner}/{repo}/packages/container/{package_type}/versions
-          # For ghcr, package_type = package name (image name without registry)
+          set -euo pipefail
           PKG="${GITHUB_REPOSITORY##*/}"
           echo "Repo: $REPO  Package: $PKG"
-          # Fetch all versions with tags
-          curl -s -H "Authorization: Bearer $GH_TOKEN" \
-            "https://api.github.com/repos/$REPO/packages/container/$PKG/versions" > /tmp/versions.json
-          echo "Versions fetched: $(cat /tmp/versions.json | jq length)"
+          # Fetch all package versions with their tags.
+          curl -sSL -f -H "Authorization: Bearer $GH_TOKEN" \
+            "https://api.github.com/repos/$REPO/packages/container/$PKG/versions" \
+            -o /tmp/versions.json
+          echo "Versions fetched: $(jq 'length' /tmp/versions.json)"
 
-          jq -c '.[] | {id: .id, name: .name, tags: (.metadata?.container?.tags // [])}' /tmp/versions.json | while read -r item; do
+          # A version is KEPT when ANY of its tags is protected (main or v* semver).
+          # Delete acts on the version id, so the keep decision must consider the
+          # version's whole tag list — otherwise deleting a branch tag would wipe
+          # the main tag shared by the same digest.
+          jq -c '.[] | {id: .id, tags: (.metadata?.container?.tags // [])}' /tmp/versions.json | while IFS= read -r item; do
             vid=$(echo "$item" | jq -r '.id')
-            # Tags array; we examine all tags for this version
-            echo "$item" | jq -r '.tags[]? // empty' | while read -r tag; do
-              [ -z "$tag" ] && continue
-              case "$tag" in
-                main|v*) echo "KEEP version $vid tag=$tag" ;;
-                *)
-                  echo "DELETE version $vid tag=$tag"
-                  curl -s -o /dev/null -w "%{http_code}" -X DELETE \
-                    -H "Authorization: Bearer $GH_TOKEN" \
-                    "https://api.github.com/repos/$REPO/packages/container/$PKG/versions/$vid"
-                  ;;
-              esac
-            done
+            tags=$(echo "$item" | jq -r '[.tags[]] | join(",")')
+            protected=$(echo "$item" | jq -r '[.tags[] | select(test("^main$") or test("^v[0-9]"))] | length')
+            if [ "$protected" -gt 0 ]; then
+              echo "KEEP version $vid (tags: $tags)"
+              continue
+            fi
+            code=$(curl -sSL -o /dev/null -w "%{http_code}" -X DELETE \
+              -H "Authorization: Bearer $GH_TOKEN" \
+              "https://api.github.com/repos/$REPO/packages/container/$PKG/versions/$vid")
+            echo "DELETE version $vid (tags: $tags) http=$code"
+            # GH accepts a version delete async (202) or immediately (204).
+            if [ "$code" != "202" ] && [ "$code" != "204" ]; then
+              echo "Unexpected delete status $code for version $vid" >&2
+              exit 1
+            fi
           done

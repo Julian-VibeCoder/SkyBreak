@@ -1,6 +1,11 @@
 node_modules
+frontend/build
 frontend/src/.gitkeep
 *.db
+*.pyc
+__pycache__
 .git
 .tmp
-frontend/build
+tests
+doc
+memory.md
