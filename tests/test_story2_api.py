@@ -3,7 +3,7 @@ import sqlite3
 import os
 from skybreak.app import app
 
-DB_PATH = "/data/skybreak.db"
+DB_PATH = os.environ.get("DB_FILE", "/data/skybreak.db")
 
 @pytest.fixture
 def client():

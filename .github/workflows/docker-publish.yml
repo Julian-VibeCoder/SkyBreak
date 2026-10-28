@@ -5,8 +5,6 @@ on:
   push:
     branches: [main]
     tags: ['v*']
-  pull_request:
-    branches: [main]
 
 env:
   REGISTRY: ghcr.io
@@ -49,7 +47,6 @@ jobs:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
             type=ref,event=branch
-            type=ref,event=pr
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
             # Per-branch tag for open PR branches (non-main, sanitized)
@@ -62,9 +59,9 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          build-args: |
-            CACHEBUST=${{ github.sha }}
-          # Cache invalidieren, wenn frontend/src ändert, damit Build korrekt
+          # Persist the build cache to a branch-scoped registry ref so repeated
+          # runs of the same branch reuse it instead of rebuilding from scratch.
           cache-from: |
-            type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:main
-          cache-to: type=inline
+            type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:build-cache-${{ steps.branch_tag.outputs.value }}
+          cache-to: |
+            type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:build-cache-${{ steps.branch_tag.outputs.value }},mode=max

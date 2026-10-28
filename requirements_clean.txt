@@ -1,8 +1,0 @@
-flask
-fast-flights
-apscheduler
-airportsdata
-tenacity
-primp
-protobuf
-selectolax

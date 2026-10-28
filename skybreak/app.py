@@ -589,7 +589,7 @@ def update_missing_prices():
         global _price_in_progress
         try:
             conn = sqlite3.connect(DB_PATH, timeout=30.0)
-            rows = conn.execute("SELECT DISTINCT ft.id FROM favorite_trips ft LEFT JOIN favorite_trip_prices ftp ON ft.id = ftp.favorite_id WHERE ftp.id IS NULL OR ftp.price_outbound IS NULL OR ftp.price_return IS NULL").fetchall()
+            rows = conn.execute("SELECT DISTINCT ft.id FROM favorite_trips ft LEFT JOIN favorite_trip_prices ftp ON ft.id = ftp.favorite_id WHERE ftp.favorite_id IS NULL OR ftp.price_outbound IS NULL OR ftp.price_return IS NULL").fetchall()
             conn.close()
             for (fav_id,) in rows:
                 try:
