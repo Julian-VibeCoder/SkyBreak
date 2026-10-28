@@ -204,7 +204,7 @@ def migration_v11(conn):
     except sqlite3.Error as e:
         conn.rollback()
         logger.warning("Migration v11 partially applied, retrying next start: %s", e)
-        return
+        raise
     _bump(conn, 11)
 
 
