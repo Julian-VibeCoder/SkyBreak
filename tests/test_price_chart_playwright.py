@@ -1,8 +1,22 @@
 """Playwright-Test: Preis-Chart-Button auf Favorit in Preise-Seite öffnet Chart mit 3 Kurven."""
-from playwright.sync_api import sync_playwright
+import pytest
+
+playwright = None
+try:
+    from playwright.sync_api import sync_playwright as _sp
+    playwright = _sp
+except ImportError:
+    pass
+
+
+pytestmark = pytest.mark.skipif(
+    playwright is None,
+    reason="Playwright not installed — install with `pip install playwright` and `playwright install`",
+)
+
 
 def test_chart_button_opens_modal():
-    with sync_playwright() as p:
+    with playwright() as p:
         browser = p.chromium.launch()
         page = browser.new_page()
         page.goto("http://localhost:8088/")
