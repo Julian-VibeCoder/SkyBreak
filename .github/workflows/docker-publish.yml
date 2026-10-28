@@ -32,13 +32,16 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Compute branch tag
+      - name: Compute cache ref (downcased for GHCR)
         id: branch_tag
         run: |
           RAW="${{ github.ref_name }}"
           SANITIZED=$(echo "$RAW" | tr '/' '-' | sed 's/[^a-zA-Z0-9_.-]/_/g')
           echo "value=branch-${SANITIZED}" >> $GITHUB_OUTPUT
-          echo "Branch tag = branch-${SANITIZED}"
+          # GHCR registry cache requires lowercase repository name
+          CACHE_REF=$(echo "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}" \
+            | tr '[:upper:]' '[:lower:]')
+          echo "CACHE_REF=${CACHE_REF}" >> $GITHUB_ENV
 
       - name: Extract metadata
         id: meta
@@ -62,6 +65,6 @@ jobs:
           # Persist the build cache to a branch-scoped registry ref so repeated
           # runs of the same branch reuse it instead of rebuilding from scratch.
           cache-from: |
-            type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:build-cache-${{ steps.branch_tag.outputs.value }}
+            type=registry,ref=${{ env.CACHE_REF }}:${{ steps.branch_tag.outputs.value }}
           cache-to: |
-            type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:build-cache-${{ steps.branch_tag.outputs.value }},mode=max
+            type=registry,ref=${{ env.CACHE_REF }}:${{ steps.branch_tag.outputs.value }},mode=max
