@@ -54,7 +54,7 @@ def validate_iata(code: str) -> bool:
 def add_airport(code: str) -> int:
     if not validate_iata(code):
         raise ValueError(f"Invalid IATA code: {code}")
-    init_db()
+    # We don't call init_db() here because migrations are handled by the application startup
     conn = sqlite3.connect(DB_PATH, timeout=30.0)
     name = fetch_airport_name(code.upper()) or code.upper()
     cur = conn.execute("INSERT OR IGNORE INTO airports (code, name) VALUES (?, ?)", (code.upper(), name))
@@ -65,7 +65,7 @@ def add_airport(code: str) -> int:
 def delete_airport(code: str) -> int:
     if not validate_iata(code):
         raise ValueError(f"Invalid IATA code: {code}")
-    init_db()
+    # We don't call init_db() here because migrations are handled by the application startup
     conn = sqlite3.connect(DB_PATH, timeout=30.0)
     cur = conn.execute("DELETE FROM airports WHERE code = ?", (code.upper(),))
     # Also clean up flights for this airport to avoid orphaned data per Story 11

@@ -32,9 +32,5 @@ jobs:
 
       - name: Run tests
         run: |
-          # Exclude infra-only tests: a Docker daemon, a Playwright browser,
-          # and the JS test dir. The unit/integration suite below must pass.
-          python -m pytest tests/ \
-            --ignore=tests/frontend \
-            --ignore=tests/test_docker_build.py \
-            --ignore=tests/test_price_chart_playwright.py -v
+          # Run the full test suite including database migration tests
+          python -m pytest tests/ -v --tb=short

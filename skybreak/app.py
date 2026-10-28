@@ -57,7 +57,9 @@ _scrape_in_progress = False
 _price_lock = threading.Lock()
 _price_in_progress = False
 
+# Initialize the database at startup via migration system
 from skybreak.db_migrate import apply_migrations
+# Ensure the migrations have been applied before any application logic begins
 apply_migrations()
 
 @app.route("/api/airports", methods=["GET"])
