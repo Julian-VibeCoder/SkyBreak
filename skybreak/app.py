@@ -1,42 +1,44 @@
 import logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
-from flask import Flask, request, jsonify, send_from_directory
-from skybreak.airport_lookup import fetch_airport_name, fetch_city_country
-_airport_lookup_cache = {}
-_city_lookup_cache = {}
-# Preload airport names/countries for speed
-try:
-    import sqlite3, os
-    _tmp_db = sqlite3.connect(os.environ.get('DB_FILE', '/data/skybreak.db'), timeout=5.0)
-    for row in _tmp_db.execute('SELECT code, name FROM airports').fetchall():
-        _airport_lookup_cache[row[0]] = row[1] or row[0]
-    _tmp_db.close()
-except Exception:
-    pass
-# Cache wrappers defined below
-# Cache for airport lookups (Option 1 + 3)
-_airport_lookup_cache = {}
-_city_lookup_cache = {}
-# Preload airport names/countries for speed
-try:
-    import sqlite3, os
-    _tmp_db = sqlite3.connect(os.environ.get('DB_FILE', '/data/skybreak.db'), timeout=5.0)
-    for row in _tmp_db.execute('SELECT code, name FROM airports').fetchall():
-        _airport_lookup_cache[row[0]] = row[1] or row[0]
-    _tmp_db.close()
-except Exception:
-    pass
-import airportsdata
-_AIRPORTS = airportsdata.load('IATA')
-from skybreak.airport import add_airport, delete_airport, validate_iata
+
+from datetime import datetime, timedelta, timezone
+from datetime import time as dt_time
+import os
 import sqlite3
 import threading
-from datetime import datetime, timezone
-import os
+
+# Standard + third-party
+import airportsdata
+_AIRPORTS = airportsdata.load('IATA')
+from flask import Flask, request, jsonify, send_from_directory
+
+# Project modules
+from skybreak.airport import add_airport, delete_airport, validate_iata
+from skybreak.airport_lookup import fetch_airport_name, fetch_city_country
 
 # Configurable paths for testing vs production
 FRONTEND_BUILD_DIR = os.environ.get("FRONTEND_BUILD_DIR", "/app/frontend/build")
 DB_PATH = os.environ.get("DB_FILE", "/data/skybreak.db")
+
+# Cache state (lazily warmed by _preload_airport_cache after migrations)
+_airport_lookup_cache: dict[str, str] = {}
+_city_lookup_cache: dict[str, str] = {}
+
+
+def _preload_airport_cache() -> None:
+    """Warm the airport-name cache from the DB. Safe to call even if empty."""
+    try:
+        conn = sqlite3.connect(
+            os.environ.get("DB_FILE", "/data/skybreak.db"), timeout=5.0,
+        )
+        for row in conn.execute("SELECT code, name FROM airports").fetchall():
+            _airport_lookup_cache[row[0]] = row[1] or row[0]
+        conn.close()
+    except Exception:
+        pass
+
+
+_preload_airport_cache()
 
 app = Flask(__name__, static_folder=os.path.join(FRONTEND_BUILD_DIR, "static"), static_url_path="/static")
 
@@ -57,9 +59,9 @@ _scrape_in_progress = False
 _price_lock = threading.Lock()
 _price_in_progress = False
 
-# Initialize the database at startup via migration system
+# Apply DB migrations at module load time so every route works after startup.
 from skybreak.db_migrate import apply_migrations
-# Ensure the migrations have been applied before any application logic begins
+
 apply_migrations()
 
 @app.route("/api/airports", methods=["GET"])
@@ -179,7 +181,6 @@ def price_history():
     ])
 
 
-@app.route("/api/flights/fetch-now", methods=["POST"])
 @app.route("/api/flights/fetch-now", methods=["POST"])
 def fetch_now():
     global _scrape_in_progress
@@ -432,16 +433,25 @@ def price_status():
         running = _price_in_progress
     return jsonify({"running": running})
 
+def _safe_weekdays(values: list[int]) -> list[int]:
+    """Keep only valid weekday ints (0=Mon .. 6=Sun)."""
+    return [v for v in values if isinstance(v, int) and 0 <= v <= 6]
+
+
 @app.route("/api/turnarounds", methods=["GET"])
 def find_short_trips():
-    # Neuer Algorithmus: SQL-Filter + Two-Pointer/Hash-Join (Pseudocode-Implementierung)
-    from datetime import datetime, timedelta, time
+    """Find outbound/return flight combinations within the user's date & weekday prefs."""
     start_str = request.args.get('start', '')
     end_str = request.args.get('end', '')
-    start_days = [int(x) for x in request.args.get('start_days', '').split(',') if x != '']
-    if not start_days: start_days = [4]
-    end_days = [int(x) for x in request.args.get('end_days', '').split(',') if x != '']
-    if not end_days: end_days = [1]
+    start_days_raw = _safe_weekdays(
+        [int(x) for x in request.args.get('start_days', '').split(',') if x != ''],
+    )
+    end_days_raw = _safe_weekdays(
+        [int(x) for x in request.args.get('end_days', '').split(',') if x != ''],
+    )
+    # Fall back to hard-coded defaults if the lists are still empty after filtering.
+    start_days = start_days_raw or [4]   # Friday by default
+    end_days = end_days_raw or [1]      # Monday by default
     max_dep_str = request.args.get('max_dep_dest', '23:59')
     min_ret_str = request.args.get('min_ret_dep', '00:00')
     start_airport = request.args.get('start_airport', '').strip().upper() or None
@@ -607,8 +617,9 @@ def update_missing_prices():
 
 
 if __name__ == "__main__":
-    apply_migrations()
+    # Migrations already applied at module load (line 65); start scheduler and serve.
     from skybreak.scraper_job import start_price_scheduler
+
     start_price_scheduler()
     app.run(host="0.0.0.0", port=80)
 
