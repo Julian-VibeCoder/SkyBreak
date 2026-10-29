@@ -1,7 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import CollapsibleSidebar from './components/CollapsibleSidebar';
-import Layout from './components/Layout';
-import ChartModal from './components/ChartModal';
+import AirportsTab from './components/AirportsTab';
+import FlightsTab from './components/FlightsTab';
+import TripsTab from './components/TripsTab';
+import FavoriteTripPrices from './components/FavoriteTripPrices';
+import SettingsTab from './components/SettingsTab';
+import { useActiveTab } from './hooks/useActiveTab';
+import { useAirports } from './hooks/useAirports';
 
 const NAV = [
   { key: 'trips', label: 'Trips', icon: '🧳' },
@@ -10,175 +15,15 @@ const NAV = [
   { key: 'flights', label: 'Flights', icon: '🛫' },
   { key: 'settings', label: 'Settings', icon: '⚙️' },
 ];
-function FavoriteTripPrices() {
-  const [prices, setPrices] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [updating, setUpdating] = useState(false);
-  const [progress, setProgress] = useState(false);
-  const [sortKey, setSortKey] = useState('price_total');
-  const [sortDir, setSortDir] = useState('desc');
-  const [chartOpen, setChartOpen] = useState(false);
-  const [chartData, setChartData] = useState(null);
-  const [expanded, setExpanded] = useState({});
-  const [grpSortKey, setGrpSortKey] = useState({});
-  const [grpSortDir, setGrpSortDir] = useState({});
-  const [filterStart, setFilterStart] = useState('');
-  const [filterEnd, setFilterEnd] = useState('');
-  const toggle = (k) => setExpanded(e => ({...e, [k]: !e[k]}));
-  const load = () => { setLoading(true); fetch('/api/favorites').then(r => r.json()).then(d => { setPrices(Array.isArray(d) ? d : []); }).catch(() => setPrices([])).finally(() => setLoading(false)); };
-  const [pollActive, setPollActive] = useState(false);
-  useEffect(() => { load(); let prevRunning = false; const iv = setInterval(() => { if (!pollActive) return; fetch('/api/prices/status').then(r=>r.json()).then(s=>{ if(s.running){setProgress(true); setPollActive(true);}else{setProgress(false); setPollActive(false); if(prevRunning && !s.running){ load(); } } prevRunning = !!s.running; }).catch(()=>{}); }, 1500); return () => clearInterval(iv); }, [pollActive]);
-  if (!prices.length) return <p style={{ color: '#94a3b8', fontSize: 13 }}>No favorites yet.</p>;
-  const handleUpdate = () => { if (updating || progress) return; setUpdating(true); setProgress(true); setPollActive(true); fetch('/api/prices', {method:'POST'}).then(r => r.json()).then(d => { if(d.updated) { setTimeout(load, 800); } else { setProgress(false); setPollActive(false); } }).catch(() => { setProgress(false); setPollActive(false); }).finally(() => setUpdating(false)); };
-  const handleUpdateMissing = () => { if (updating || progress) return; setUpdating(true); setProgress(true); setPollActive(true); fetch('/api/prices/missing', {method:'POST'}).then(r => r.json()).then(d => { if(d.updated) { setTimeout(load, 800); } else { setProgress(false); setPollActive(false); } }).catch(() => { setProgress(false); setPollActive(false); }).finally(() => setUpdating(false)); };
-  const openChartFor = (tripId) => {
-    const trip = prices.find(p => p.id === tripId || p.id == tripId);
-    if (!trip) { setChartData([]); setChartOpen(true); return; }
-    // Build minimal array for ChartModal (expects array of points)
-    setChartOpen(true);
-    fetch(`/api/prices/history?trip_id=${tripId}`).then(r => r.json()).then(data => {
-      setChartData(Array.isArray(data) && data.length ? data : [{date: trip.trip_date || '-', outbound_price: trip.price_outbound || 0, return_price: trip.price_return || 0, total_price: trip.price_total || 0}]);
-    }).catch(() => {
-      setChartData([{date: trip.trip_date || '-', outbound_price: trip.price_outbound || 0, return_price: trip.price_return || 0, total_price: trip.price_total || 0}]);
-    });
-  };
-  const sorted = [...prices].sort((a,b) => {
-    let av = a[sortKey], bv = b[sortKey];
-    if (sortKey === 'price_total') {
-      const avNull = av == null || av === undefined;
-      const bvNull = bv == null || bv === undefined;
-      if (avNull && bvNull) return 0;
-      if (avNull) return 1; // null immer am Ende
-      if (bvNull) return -1;
-      const n1 = Number(av), n2 = Number(bv);
-      if (n1 < n2) return sortDir === 'asc' ? -1 : 1;
-      if (n1 > n2) return sortDir === 'asc' ? 1 : -1;
-      return 0;
-    }
-    if (av == null) av = -Infinity; if (bv == null) bv = -Infinity;
-    if (typeof av === 'string') av = av.toLowerCase(); if (typeof bv === 'string') bv = bv.toLowerCase();
-    if (av < bv) return sortDir === 'asc' ? -1 : 1;
-    if (av > bv) return sortDir === 'asc' ? 1 : -1;
-    return 0;
-  });
-  const fmtDur = (m) => { if (m == null || m === undefined || m === '') return '—'; return m + ' min'; };
-  const fmtTime = (t) => { if (!t) return '—'; if (t.includes('T')) return t.substring(11,16); const parts = String(t).split(' '); return parts.length > 1 ? parts[1].substring(0,5) : t; };
-  const headerBtn = (key, label) => (
-    <button onClick={() => { if (sortKey === key) { setSortDir(sortDir === 'asc' ? 'desc' : 'asc'); } else { setSortKey(key); setSortDir('asc'); } }} style={{ background:'none', border:'none', color:'#f8fafc', fontWeight:700, fontSize:11, cursor:'pointer', padding:0 }}>
-      {label} {sortKey === key ? (sortDir === 'asc' ? '▲' : '▼') : ''}
-    </button>
-  );
-  // Gruppierung nach Ziel (analog turnarounds)
-  const groupsObj = {};
-  prices.forEach(p => { const key = p.destination_airport || p.dest_city_country || '-'; if (!groupsObj[key]) groupsObj[key] = []; groupsObj[key].push(p); });
-  const groupKeys = Object.keys(groupsObj).sort();
 
-  return (
-    <div>
-        <h4 style={{ margin: '0 0 10px', fontSize: 16, fontWeight: 700, color: '#f8fafc', letterSpacing: 0.2 }}>Favorite Trips</h4>
-        <div style={{ display:'flex', gap: 10, flexWrap:'wrap', marginBottom: 10, alignItems:'center' }}>
-          <label style={{ color:'#94a3b8', fontSize:12 }}>Filter date range:</label>
-          <input type="date" value={filterStart} onChange={e => setFilterStart(e.target.value)} style={{ padding:'5px 8px', borderRadius:6, border:'1px solid rgba(255,255,255,0.15)', background:'rgba(255,255,255,0.06)', color:'#f8fafc', fontSize:12 }} />
-          <input type="date" value={filterEnd} onChange={e => setFilterEnd(e.target.value)} style={{ padding:'5px 8px', borderRadius:6, border:'1px solid rgba(255,255,255,0.15)', background:'rgba(255,255,255,0.06)', color:'#f8fafc', fontSize:12 }} />
-          <button onClick={() => { setFilterStart(''); setFilterEnd(''); }} style={{ padding:'5px 10px', borderRadius:6, border:'none', background:'#475569', color:'#f8fafc', fontSize:11, cursor:'pointer' }}>Clear</button>
-        </div>
-        <button disabled={updating || progress} onClick={handleUpdate} style={{ padding: '6px 10px', borderRadius: 6, border: 'none', background: (updating || progress) ? '#475569' : '#f59e0b', color: '#0f172a', fontWeight: 700, fontSize: 12, cursor: (updating || progress) ? 'not-allowed' : 'pointer', marginBottom: 8, marginRight: 10 }}>
-          {progress || updating ? 'Updating prices... (running)' : 'Update all prices'}
-        </button>
-        <button disabled={updating || progress} onClick={handleUpdateMissing} style={{ padding: '6px 10px', borderRadius: 6, border: 'none', background: (updating || progress) ? '#475569' : '#38bdf8', color: '#0f172a', fontWeight: 700, fontSize: 12, cursor: (updating || progress) ? 'not-allowed' : 'pointer', marginBottom: 8 }}>
-          {progress || updating ? 'Updating prices... (running)' : 'Update missing prices'}
-        </button>
-        {groupKeys.map(key => {
-          let grp = groupsObj[key];
-          if (filterStart) grp = grp.filter(p => (p.outbound_trip_date || p.trip_date || '') >= filterStart);
-          if (filterEnd) grp = grp.filter(p => (p.outbound_trip_date || p.trip_date || '') <= filterEnd);
-          if (!grp.length) return null;
-          const isOpen = !!expanded['price_' + key];
-          const cheapest = grp.reduce((m, p) => (p.price_total != null && (m == null || p.price_total < m.price_total)) ? p : m, null);
-          const cheapestPrice = cheapest && cheapest.price_total != null ? cheapest.price_total + ' €' : '—';
-          return (
-            <div key={key} style={{ marginBottom: 10, border: '1px solid rgba(255,255,255,0.08)', borderRadius: 10, overflow: 'hidden' }}>
-              <button onClick={() => toggle('price_' + key)} style={{ width: '100%', textAlign: 'left', padding: '10px 14px', background: 'rgba(255,255,255,0.06)', color: '#f8fafc', fontWeight: 700, fontSize: 14, border: 'none', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span>{(grp[0]?.dest_city_country || key) + ' (' + key + ')'}</span>
-                <span style={{ color: '#38bdf8', fontWeight: 600, fontSize: 12, marginLeft: 'auto', marginRight: 8 }}>Cheapest: {cheapestPrice}</span>
-                <span style={{ color: '#94a3b8', fontWeight: 500 }}>{isOpen ? '▲' : '▼'}</span>
-              </button>
-              {isOpen && (
-                <div style={{ padding: 8 }}>
-                  <button onClick={async () => { if (!confirm('Delete all favorites in this group (matching filter)?')) return; for (const p of grp) { await fetch('/api/favorites/'+p.id, {method:'DELETE'}); } load(); }} style={{ padding:'5px 10px', borderRadius:6, border:'none', background:'#ef4444', color:'#fff', fontSize:11, fontWeight:700, cursor:'pointer', marginBottom:8 }}>Delete all in group</button>
-                  <table style={{ width: '100%', minWidth: '720px', borderCollapse: 'separate', borderSpacing: '0 4px', fontSize: 12, tableLayout: 'fixed' }}>
-                    <thead><tr style={{ borderBottom: '1px solid rgba(255,255,255,0.12)' }}>
-                      <th style={{ textAlign: 'left', padding: '6px 8px', color: '#94a3b8', whiteSpace: 'nowrap', width: '18%' }}><button onClick={() => { const k = 'grp_' + key; const isSame = grpSortKey[k] === 'origin'; const curDir = grpSortDir[k] || 'asc'; setGrpSortDir({...grpSortDir, [k]: isSame ? (curDir === 'asc' ? 'desc' : 'asc') : 'asc'}); setGrpSortKey({...grpSortKey, [k]: 'origin'}); }} style={{ background:'none', border:'none', color:'#f8fafc', fontWeight:700, fontSize:11, cursor:'pointer', padding:0, textAlign:'left' }}>Origin {grpSortKey['grp_' + key] === 'origin' ? (grpSortDir['grp_' + key] === 'asc' ? '▲' : '▼') : ''}</button></th>
-                      <th style={{ textAlign: 'left', padding: '6px 8px', color: '#94a3b8', whiteSpace: 'nowrap', width: '22%' }}><button onClick={() => { const k = 'grp_' + key; const isSame = grpSortKey[k] === 'outbound'; const curDir = grpSortDir[k] || 'asc'; setGrpSortDir({...grpSortDir, [k]: isSame ? (curDir === 'asc' ? 'desc' : 'asc') : 'asc'}); setGrpSortKey({...grpSortKey, [k]: 'outbound'}); }} style={{ background:'none', border:'none', color:'#f8fafc', fontWeight:700, fontSize:11, cursor:'pointer', padding:0, textAlign:'left' }}>Outbound {grpSortKey['grp_' + key] === 'outbound' ? (grpSortDir['grp_' + key] === 'asc' ? '▲' : '▼') : ''}</button></th>
-                      <th style={{ textAlign: 'left', padding: '6px 8px', color: '#94a3b8', whiteSpace: 'nowrap', width: '22%' }}><button onClick={() => { const k = 'grp_' + key; const isSame = grpSortKey[k] === 'return'; const curDir = grpSortDir[k] || 'asc'; setGrpSortDir({...grpSortDir, [k]: isSame ? (curDir === 'asc' ? 'desc' : 'asc') : 'asc'}); setGrpSortKey({...grpSortKey, [k]: 'return'}); }} style={{ background:'none', border:'none', color:'#f8fafc', fontWeight:700, fontSize:11, cursor:'pointer', padding:0, textAlign:'left' }}>Return {grpSortKey['grp_' + key] === 'return' ? (grpSortDir['grp_' + key] === 'asc' ? '▲' : '▼') : ''}</button></th>
-                      <th style={{ textAlign: 'left', padding: '6px 8px', color: '#94a3b8', whiteSpace: 'nowrap', width: '20%' }}><button onClick={() => { const k = 'grp_' + key; const isSame = grpSortKey[k] === 'cost'; const curDir = grpSortDir[k] || 'asc'; setGrpSortDir({...grpSortDir, [k]: isSame ? (curDir === 'asc' ? 'desc' : 'asc') : 'asc'}); setGrpSortKey({...grpSortKey, [k]: 'cost'}); }} style={{ background:'none', border:'none', color:'#f8fafc', fontWeight:700, fontSize:11, cursor:'pointer', padding:0, textAlign:'left' }}>Cost {grpSortKey['grp_' + key] === 'cost' ? (grpSortDir['grp_' + key] === 'asc' ? '▲' : '▼') : ''}</button></th>
-                      <th style={{ textAlign: 'center', padding: '6px 8px', color: '#94a3b8', whiteSpace: 'nowrap', width: '18%' }}>Actions</th>
-                    </tr></thead>
-                    <tbody>
-                      {[...grp].sort((a,b) => { const dir = (grpSortDir['grp_' + key] || 'asc'); const sk = (grpSortKey['grp_' + key] || 'cost'); let av=a[sk], bv=b[sk]; if (sk==='cost') { const aNull = a.price_total == null; const bNull = b.price_total == null; if (aNull && bNull) { av = bv = 0; } else if (aNull) { av = Infinity; bv = Number(b.price_total); } else if (bNull) { av = Number(a.price_total); bv = Infinity; } else { av = Number(a.price_total); bv = Number(b.price_total); } } else if (sk==='origin') { av = a.start_city_country||''; bv = b.start_city_country||''; } else if (sk==='outbound') { av = a.outbound_trip_date||a.trip_date||''; bv = b.outbound_trip_date||b.trip_date||''; } else if (sk==='return') { av = a.return_trip_date||a.trip_date||''; bv = b.return_trip_date||b.trip_date||''; } if (sk !== 'cost') { if (av == null) av = ''; if (bv == null) bv = ''; if (typeof av === 'string') av = av.toLowerCase(); if (typeof bv === 'string') bv = bv.toLowerCase(); } if (av < bv) return dir === 'asc' ? -1 : 1; if (av > bv) return dir === 'asc' ? 1 : -1; return 0; }).map(f => (
-                        <tr key={f.id} style={{ background: 'rgba(255,255,255,0.03)', borderRadius: 8, borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
-                          <td style={{ padding: '8px', color: '#f8fafc', fontWeight: 600, fontSize: 11, verticalAlign: 'top', wordBreak: 'break-word' }}>{f.start_city_country || '—'} <span style={{ color: '#94a3b8', fontSize: 10 }}>{f.start_airport || ''}</span></td>
-                          <td style={{ padding: '8px', color: '#f8fafc', fontWeight: 600, fontSize: 11, verticalAlign: 'top', wordBreak: 'break-word' }}>
-                            <div style={{ whiteSpace: 'nowrap' }}>{f.outbound_trip_date || f.trip_date} {fmtTime(f.outbound_departure)}</div>
-                            <div style={{ color: '#cbd5e1', fontSize: 10 }}>{f.outbound_flight || f.outbound_flight_number || '—'}</div>
-                          </td>
-                          <td style={{ padding: '8px', color: '#f8fafc', fontWeight: 600, fontSize: 11, verticalAlign: 'top', wordBreak: 'break-word' }}>
-                            <div style={{ whiteSpace: 'nowrap' }}>{f.return_trip_date || f.trip_date} {fmtTime(f.return_departure)}</div>
-                            <div style={{ color: '#cbd5e1', fontSize: 10 }}>{f.return_flight || f.return_flight_number || '—'}</div>
-                          </td>
-                          <td style={{ padding: '8px', color: '#38bdf8', fontWeight: 700, fontSize: 11, verticalAlign: 'top', whiteSpace: 'nowrap' }}>
-                            <div>Total: {f.price_total != null ? f.price_total + ' €' : 'none / unavailable'}</div>
-                            <div style={{ fontSize: 9, color: '#cbd5e1' }}>{f.price_outbound != null ? 'Outbound: ' + f.price_outbound + ' €' : 'Outbound: —'} | {f.price_return != null ? 'Return: ' + f.price_return + ' €' : 'Return: —'}</div>
-                            <div style={{ fontSize: 9, color: '#94a3b8' }}>(updated: {f.fetched_at ? new Date(f.fetched_at).toLocaleDateString() : '—'})</div>
-                          </td>
-                          <td style={{ padding: '8px', textAlign: 'center', verticalAlign: 'middle', whiteSpace: 'nowrap' }}>
-                            <div style={{ display: 'flex', gap: 6, justifyContent: 'center', flexWrap: 'wrap' }}>
-                              <button onClick={() => openChartFor(f.id)} style={{ padding: '5px 10px', borderRadius: 6, border: 'none', background: '#38bdf8', color: '#0f172a', fontSize: 11, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>Chart</button>
-                              <button onClick={async () => { await fetch('/api/favorites/'+f.id, {method:'DELETE'}); load(); }} style={{ padding: '5px 10px', borderRadius: 6, border: 'none', background: '#ef4444', color: '#fff', fontSize: 11, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>Delete</button>
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
-          );
-        })}
-      <ChartModal open={chartOpen} onClose={() => setChartOpen(false)} data={chartData} />
-    </div>
-  );
-}
-
-function FavoriteTrips() {
-  const [favs, setFavs] = useState([]);
-  useEffect(() => {
-    fetch('/api/favorites').then(r => r.json()).then(d => setFavs(Array.isArray(d) ? d : [])).catch(() => setFavs([]));
-  }, []);
-  const remove = async (id) => {
-    await fetch('/api/favorites/' + id, { method: 'DELETE' });
-    setFavs(f => f.filter(x => x.id !== id));
-  };
-  if (!favs.length) return <p style={{ color: '#94a3b8', fontSize: 13 }}>No favorites yet.</p>;
-  return (
-    <div>
-      {favs.map(f => (
-        <div key={f.id} style={{ padding: '8px 0', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
-          <div style={{ color: '#f8fafc', fontWeight: 600, fontSize: 13 }}>{f.destination_airport || 'Destination'}</div>
-          <div style={{ color: '#94a3b8', fontSize: 12 }}>{f.trip_date} @ {f.start_time || ''}</div>
-          <div style={{ color: '#cbd5e1', fontSize: 12 }}>{f.outbound_flight_number || ''} → {f.return_flight_number || ''}</div>
-          <button onClick={() => remove(f.id)} style={{ marginTop: 4, padding: '4px 8px', borderRadius: 6, border: 'none', background: '#ef4444', color: '#fff', fontSize: 11, cursor: 'pointer' }}>Delete</button>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-
+// App shell: routing, responsive sidebar, and the shared airport list that the
+// per-tab components consume. Each tab owns its own data + interactions.
 export default function App() {
-  const [tab, setTab] = useState('trips');
+  const [tab, setTab] = useActiveTab(NAV);
   const [mobileNavHidden, setMobileNavHidden] = useState(typeof window !== 'undefined' ? window.innerWidth < 1024 : false);
+  const { list, setList, airportNames } = useAirports();
+  const [scrapeRunning, setScrapeRunning] = useState(false);
+
   useEffect(() => {
     const handleResize = () => {
       if (window.innerWidth < 1024) setMobileNavHidden(true);
@@ -186,138 +31,29 @@ export default function App() {
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
-  const [code, setCode] = useState('');
-  const [list, setList] = useState([]);
-  const [feedback, setFeedback] = useState('');
-  const [flights, setFlights] = useState([]);
-      const [expanded, setExpanded] = useState({});
-    const toggle = (c) => setExpanded(e => ({...e, [c]: !e[c]}));
-    const [flightDate, setFlightDate] = useState(new Date().toISOString().split('T')[0]);
-  const [scrapeRunning, setScrapeRunning] = useState(false);
-  const [futureInfo, setFutureInfo] = useState({});
-  const [tripStart, setTripStart] = useState(new Date().toISOString().split('T')[0]);
-  const [tripEnd, setTripEnd] = useState(new Date(Date.now() + 30*86400000).toISOString().split('T')[0]);
-  const [startWeekdays, setStartWeekdays] = useState([4]);
-  const [endWeekdays, setEndWeekdays] = useState([6]);
-  const [maxDepToDest, setMaxDepToDest] = useState('18:00');
-  const [settings, setSettings] = useState({ fetch_max_months: '1', scrape_delay_ms: '500', google_consent_cookie: 'CAESHAgBEhJnd3NfMjAyMzA4MTAtMF9SQzIaAmRlIAEaBgiAo_CmBg' });
-  useEffect(() => {
-    if (tab === 'settings') {
-      fetch('/api/settings').then(r => r.json()).then(data => {
-        setSettings({
-          fetch_max_months: data.fetch_max_months || data.fetch_max_days || '1',
-          scrape_delay_ms: data.scrape_delay_ms || '500',
-          price_fetch_interval_hours: data.price_fetch_interval_hours || '6',
-          google_consent_cookie: data.google_consent_cookie || 'CAESHAgBEhJnd3NfMjAyMzA4MTAtMF9SQzIaAmRlIAEaBgiAo_CmBg'
-        });
-      }).catch(() => {});
-    }
-  }, [tab]);
-  const [minRetDep, setMinRetDep] = useState('10:00');
-  const [maxTripDays, setMaxTripDays] = useState(5);
-  const [minTripDays, setMinTripDays] = useState(1);
-  const [startAirport, setStartAirport] = useState('');
-  const [endAirport, setEndAirport] = useState('');
-  const [turnarounds, setTurnarounds] = useState([]);
-  const [airportNames, setAirportNames] = useState({});
 
+  // Poll the scraper status while it runs; stop once it finishes.
   useEffect(() => {
-    if (tab === 'trips' && tripStart && tripEnd && startWeekdays.length > 0 && endWeekdays.length > 0 && maxDepToDest && minRetDep && maxTripDays) {
-      const params = new URLSearchParams({
-        start: tripStart, end: tripEnd,
-        start_days: startWeekdays.join(','), end_days: endWeekdays.join(','),
-        max_dep_dest: maxDepToDest, min_ret_dep: minRetDep, max_trip_days: maxTripDays, min_trip_days: minTripDays
-      });
-      if (startAirport) params.append("start_airport", startAirport);
-      if (endAirport) params.append("end_airport", endAirport);
-      params.append('max_trip_days', maxTripDays);
-      fetch('/api/turnarounds?' + params.toString()).then(r => r.json()).then(data => setTurnarounds(data.turnarounds || data.results || [])).catch(() => setTurnarounds([]));
-    }
-  }, [tab, tripStart, tripEnd, startWeekdays, endWeekdays, maxDepToDest, minRetDep, startAirport, endAirport, maxTripDays, minTripDays]);
-
-  useEffect(() => {
-    if (tab === 'flights') loadFlights();
-  }, [flightDate, tab]);
-
-  useEffect(() => {
-    fetch('/api/airports').then(r => r.json()).then(data => {
-      const codes = Array.isArray(data) ? data.map(c => typeof c === 'string' ? c : c.code || c) : [];
-      setList(codes);
-      const nameMap = {};
-      data.forEach(item => {
-        const code = typeof item === 'string' ? item : item.code || item;
-        const name = typeof item === 'string' ? '' : (item.name || item.name || '');
-        if (code) nameMap[code] = name || code;
-      });
-      setAirportNames(nameMap);
-    }).catch(() => setList([]));
-    // Only call scrape-status as long as it is true (running)
     const check = () => {
-      fetch('/api/flights/scrape-status').then(r => r.json()).then(d => {
-        if (d.running) {
-          setScrapeRunning(true);
-          // keep checking while true
-          setTimeout(check, 2000);
-        } else {
-          setScrapeRunning(false);
-        }
-      }).catch(() => setScrapeRunning(false));
+      fetch('/api/flights/scrape-status')
+        .then(r => r.json())
+        .then(d => {
+          setScrapeRunning(!!d.running);
+          if (d.running) setTimeout(check, 2000);
+        })
+        .catch(() => setScrapeRunning(false));
     };
     check();
-    // No fixed interval; only poll when running
-    return () => {};
   }, []);
 
-  const loadFlights = () => {
-    const airport = document.getElementById('codeInput')?.value?.trim().toUpperCase() || '';
-    let url = '/api/flights?';
-    if (airport) url += 'airport=' + airport + '&';
-    if (flightDate) url += 'date=' + flightDate;
-    fetch(url).then(r => r.json()).then(data => { setFlights(data); fetch('/api/flights/future').then(r => r.json()).then(setFutureInfo).catch(() => setFutureInfo({})); }).catch(() => setFlights([]));
+  const handleFetchNow = () => {
+    fetch('/api/flights/fetch-now', { method: 'POST' }).then(() => alert('Fetch started'));
   };
 
-  const checkScrape = () => {
-    fetch('/api/flights/scrape-status').then(r => r.json()).then(d => {
-      setScrapeRunning(!!d.running);
-      if (d.running) {
-        setTimeout(checkScrape, 2000);
-      }
-    }).catch(() => setScrapeRunning(false));
-  };
-
-  const submit = async (e) => {
-    e.preventDefault();
-    const raw = code.trim().toUpperCase();
-    if (!/^[A-Z0-9]{3}$/.test(raw)) { setFeedback('Invalid IATA code'); return; }
-    const res = await fetch('/api/airports', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({code: raw}) });
-    if (res.ok) {
-      setFeedback('Gespeichert: ' + raw);
-      setCode('');
-      setList([...list, raw]);
-      loadFlights();
-    } else { setFeedback('Serverfehler'); }
-  };
-
-  useEffect(() => {
-    const handlePop = () => {
-      const pathTab = window.location.pathname.replace('/', '').replace('/', '');
-      const valid = NAV.find(n => n.key === pathTab);
-      if (valid) setTab(valid.key);
-    };
-    window.addEventListener('popstate', handlePop);
-    const initial = window.location.pathname.replace('/', '').replace('/', '');
-    const valid = NAV.find(n => n.key === initial);
-    if (valid && initial !== '') setTab(valid.key);
-    return () => window.removeEventListener('popstate', handlePop);
-  }, []);
-
-  const removeAirport = async (c) => {
-    const res = await fetch('/api/airports/' + c, { method: 'DELETE' });
-    if (res.ok) {
-      setList(list.filter(x => x !== c));
-      setFeedback('Entfernt: ' + c);
-      loadFlights();
-    } else { setFeedback('Fehler beim Entfernen'); }
+  const selectTab = (n) => {
+    setTab(n.key);
+    if (typeof window !== 'undefined' && window.innerWidth < 1024) setMobileNavHidden(true);
+    window.history.pushState({}, '', '/' + n.key);
   };
 
   return (
@@ -325,7 +61,7 @@ export default function App() {
       display: 'flex', flexDirection: 'row', minHeight: '100dvh', fontFamily: "'Inter', 'Segoe UI', system-ui, sans-serif",
       background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)', color: '#f1f5f9'
     }}>
-        <CollapsibleSidebar collapsed={mobileNavHidden} onToggle={() => setMobileNavHidden(c => !c)}><aside style={{
+      <CollapsibleSidebar collapsed={mobileNavHidden} onToggle={() => setMobileNavHidden(c => !c)}><aside style={{
         width: 220, flexShrink: 0, background: 'rgba(15,23,42,0.85)',
         backdropFilter: 'blur(12px)', borderRight: '1px solid rgba(255,255,255,0.06)',
         padding: '18px 14px', display: 'flex', flexDirection: 'column', gap: 10,
@@ -346,7 +82,7 @@ export default function App() {
 
         <nav style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           {NAV.map(n => (
-            <a key={n.key} href={'/' + n.key} onClick={(e) => { if (e.ctrlKey || e.metaKey || e.button === 1) return; e.preventDefault(); setTab(n.key); if (typeof window !== 'undefined' && window.innerWidth < 1024) setMobileNavHidden(true); window.history.pushState({}, '', '/' + n.key); }} style={{ textDecoration: 'none', color: 'inherit', display: 'block', width: '100%' }}>
+            <a key={n.key} href={'/' + n.key} onClick={(e) => { if (e.ctrlKey || e.metaKey || e.button === 1) return; e.preventDefault(); selectTab(n); }} style={{ textDecoration: 'none', color: 'inherit', display: 'block', width: '100%' }}>
               <button style={{
                 width: '100%', textAlign: 'left', padding: '12px 14px', borderRadius: 12, border: 'none',
                 background: tab === n.key ? 'rgba(56,189,248,0.15)' : 'transparent',
@@ -367,7 +103,7 @@ export default function App() {
           </div>
         </div>
       </aside>
-    </CollapsibleSidebar>
+      </CollapsibleSidebar>
 
       <main style={{ flex: 1, padding: 36, overflow: 'auto' }}>
         <header style={{ marginBottom: 28, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -377,241 +113,12 @@ export default function App() {
               <h2 style={{ margin: 0, fontSize: 28, fontWeight: 800, letterSpacing: '-0.8px' }}>
                 Skybreak Travel Dashboard
               </h2>
-              <p style={{ margin: '6px 0 0', color: '#94a3b8', fontSize: 14 }}>
-              </p>
             </div>
           </div>
         </header>
 
         <div style={{ display: 'grid', gap: 24, gridTemplateColumns: '1fr', alignItems: 'start' }}>
-          {tab === 'airports' && (
-            <>
-              <section style={{
-                background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)',
-                borderRadius: 18, padding: 24, boxShadow: '0 10px 30px rgba(0,0,0,0.2)'
-              }}>
-                <h3 style={{ margin: '0 0 14px', fontSize: 18, fontWeight: 700, color: '#f8fafc' }}>Add Airport</h3>
-                <form onSubmit={submit} style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-                  <input id="codeInput" value={code} maxLength={3} placeholder="LHR"
-                    onChange={e => setCode(e.target.value.toUpperCase())}
-                    style={{
-                      flex: '1 1 120px', padding: '10px 14px', borderRadius: 10, border: '1px solid rgba(255,255,255,0.15)',
-                      background: 'rgba(255,255,255,0.06)', color: '#f8fafc', fontSize: 15, outline: 'none'
-                    }}/>
-                  <button type="submit" style={{
-                    padding: '10px 18px', borderRadius: 10, border: 'none', background: 'linear-gradient(135deg, #38bdf8, #818cf8)',
-                    color: '#0f172a', fontWeight: 700, fontSize: 15, cursor: 'pointer', boxShadow: '0 4px 14px rgba(56,189,248,0.35)'
-                  }}>Save</button>
-                </form>
-                <p style={{ margin: '12px 0 0', minHeight: 24, color: feedback.includes('Saved') ? '#4ade80' : (feedback.includes('Error') || feedback.includes('Invalid')) ? '#f87171' : '#94a3b8', fontSize: 13, fontWeight: 500 }}>{feedback}</p>
-              </section>
-
-              <section style={{
-                background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)',
-                borderRadius: 18, padding: 24, boxShadow: '0 10px 30px rgba(0,0,0,0.2)'
-              }}>
-                <h3 style={{ margin: '0 0 14px', fontSize: 18, fontWeight: 700, color: '#f8fafc' }}>Saved Airports</h3>
-                <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                  {list.map(c => (
-                    <li key={c} style={{
-                      background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.12)',
-                      borderRadius: 10, padding: '8px 14px', display: 'flex', alignItems: 'center', gap: 10
-                    }}>
-                      <span style={{ fontWeight: 700, color: '#38bdf8', letterSpacing: '0.5px' }}>{c}</span>
-                      <button onClick={() => removeAirport(c)} style={{
-                        background: 'rgba(255,255,255,0.08)', border: 'none', borderRadius: 6, color: '#f87171',
-                        fontSize: 14, cursor: 'pointer', padding: '2px 6px', lineHeight: 1
-                      }} title="Entfernen">×</button>
-                    </li>
-                  ))}
-                  {!list.length && <li style={{ color: '#94a3b8', fontSize: 14 }}>No airports saved yet.</li>}
-                </ul>
-              </section>
-            </>
-          )}
-
-          {tab === 'flights' && (
-            <section style={{
-              background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)',
-              borderRadius: 18, padding: 24, boxShadow: '0 10px 30px rgba(0,0,0,0.2)'
-            }}>
-<h3 style={{ margin: '0 0 14px', fontSize: 18, fontWeight: 700, color: '#f8fafc' }}>Flight Schedule</h3>
-              <div style={{ display: 'flex', gap: 10, marginBottom: 16, flexWrap: 'wrap', alignItems: 'center' }}>
-                <input type='date' value={flightDate} onChange={e => { setFlightDate(e.target.value); loadFlights(); }} style={{ padding: '10px 14px', borderRadius: 10, border: '1px solid rgba(255,255,255,0.15)', background: 'rgba(255,255,255,0.06)', color: '#f8fafc', fontSize: 15 }} />
-                <button onClick={() => setFlightDate(new Date(new Date(flightDate).getTime() - 86400000).toISOString().split('T')[0])} style={{ padding: '10px 14px', borderRadius: 10, border: 'none', background: 'linear-gradient(135deg,#6366f1,#4f46e5)', color: '#fff', fontWeight: 700, cursor: 'pointer', fontSize: 13 }}>◀ Previous Day</button>
-                <button onClick={() => setFlightDate(new Date().toISOString().split('T')[0])} style={{ padding: '10px 14px', borderRadius: 10, border: 'none', background: 'linear-gradient(135deg,#f59e0b,#d97706)', color: '#fff', fontWeight: 700, cursor: 'pointer', fontSize: 13 }}>Today</button>
-                <button onClick={() => setFlightDate(new Date(new Date(flightDate).getTime() + 86400000).toISOString().split('T')[0])} style={{ padding: '10px 14px', borderRadius: 10, border: 'none', background: 'linear-gradient(135deg,#6366f1,#4f46e5)', color: '#fff', fontWeight: 700, cursor: 'pointer', fontSize: 13 }}>Next Day ▶</button>
-                <button disabled={scrapeRunning} onClick={() => fetch('/api/flights/fetch-now', {method:'POST'}).then(r => alert('Fetch started'))} style={{padding:'10px 14px', borderRadius:10, border:'none', background:scrapeRunning ? '#475569' : '#10b981', color:'#fff', fontWeight:700, cursor:scrapeRunning ? 'not-allowed' : 'pointer', fontSize:13}}> {scrapeRunning ? 'Fetching...' : 'Fetch Now'} </button>
-                
-
-              </div>
-              {list.map(airport => {
-                const arr = flights.filter(f => f.airport_icao === airport && f.direction === 'arrival');
-                const dep = flights.filter(f => f.airport_icao === airport && f.direction === 'departure');
-                return (
-                  <div key={airport} style={{ marginBottom: 16 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
-                      <button onClick={() => toggle(airport)} style={{ flex: 1, textAlign: 'left', padding: '12px 16px', borderRadius: 10, border: '1px solid rgba(255,255,255,0.08)', background: 'rgba(255,255,255,0.06)', color: '#f8fafc', fontWeight: 700, fontSize: 16, cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        {airport} <span style={{ color: '#94a3b8', fontWeight: 500 }}>✈️</span>
-                      </button>
-                      <span style={{ marginLeft: 10, fontSize: 12, color: '#38bdf8', fontWeight: 600 }}>
-                        {futureInfo[airport] ? (futureInfo[airport].max_departure_day ? `Loaded until ${futureInfo[airport].max_departure_day}` : 'No future data') : '...'}
-                      </span>
-                    </div>
-                    <div style={{ marginTop: 8, padding: 8 }}>{expanded[airport] ? (<div>
-                      <div>
-                        <strong style={{ color: '#4ade80', fontSize: 13 }}>Arrivals ({arr.length})</strong>
-                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, marginTop: 6 }}>
-                          <thead><tr style={{ borderBottom: '1px solid rgba(255,255,255,0.1)' }}><th style={{ textAlign: 'left', padding: '4px 8px', color: '#94a3b8' }}>From</th><th style={{ textAlign: 'left', padding: '4px 8px', color: '#94a3b8' }}>Flight</th><th style={{ textAlign: 'left', padding: '4px 8px', color: '#94a3b8' }}>Departure</th><th style={{ textAlign: 'left', padding: '4px 8px', color: '#94a3b8' }}>Arrival</th><th style={{ textAlign: 'left', padding: '4px 8px', color: '#94a3b8' }}>Duration</th></tr></thead>
-                          <tbody>
-                            {arr.length === 0 && <tr><td colSpan="5" style={{ padding: '4px 8px', color: '#94a3b8' }}>No arrivals</td></tr>}
-                            {arr.map(a => <tr key={a.id || a.destination_icao + a.departure_time} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
-                                                              <td style={{ padding: '4px 8px' }}>{a.from_icao ? (a.from_airport_name ? a.from_airport_name + ' (' + a.from_icao + ')' : (a.from_icao || a.airport_icao || airport)) : (a.airport_icao || airport)}</td>
-                              <td style={{ padding: '4px 8px', fontWeight: 600 }}>{a.flight_number || '-'}</td>
-                                                              <td style={{ padding: '4px 8px', color: '#38bdf8' }}>{a.departure_time ? (() => { const ts = a.departure_time; if (!ts) return '-'; const m = ts.match(/(\d{1,2}):(\d{2})/); if (m) return m[1] + ':' + m[2]; return ts.includes(':') ? ts.split(':').slice(0,2).join(':') : '-'; })() : '-'}</td>
-                                                              <td style={{ padding: '4px 8px', color: '#4ade80' }}>{a.arrival_time ? (() => { const ts = a.arrival_time; if (!ts) return '-'; const m = ts.match(/(\d{1,2}):(\d{2})/); if (m) return m[1] + ':' + m[2]; return ts.includes(':') ? ts.split(':').slice(0,2).join(':') : '-'; })() : '-'}</td>
-                              <td style={{ padding: '4px 8px', color: '#818cf8' }}>{a.duration_minutes ? a.duration_minutes + ' min' : '-'}</td>
-                            </tr>)}
-                          </tbody>
-                        </table>
-                      </div>
-                      <div style={{ marginTop: 10 }}>
-                        <strong style={{ color: '#38bdf8', fontSize: 13 }}>Departures ({dep.length})</strong>
-                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, marginTop: 6 }}>
-                          <thead><tr style={{ borderBottom: '1px solid rgba(255,255,255,0.1)' }}><th style={{ textAlign: 'left', padding: '4px 8px', color: '#94a3b8' }}>To</th><th style={{ textAlign: 'left', padding: '4px 8px', color: '#94a3b8' }}>Flight</th><th style={{ textAlign: 'left', padding: '4px 8px', color: '#94a3b8' }}>Departure</th><th style={{ textAlign: 'left', padding: '4px 8px', color: '#94a3b8' }}>Arrival</th><th style={{ textAlign: 'left', padding: '4px 8px', color: '#94a3b8' }}>Duration</th></tr></thead>
-                          <tbody>
-                            {dep.length === 0 && <tr><td colSpan="5" style={{ padding: '4px 8px', color: '#94a3b8' }}>No departures</td></tr>}
-                            {dep.map(d => <tr key={d.id || d.destination_icao + d.departure_time} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
-                              <td style={{ padding: '4px 8px' }}>{d.destination_name ? d.destination_name + ' (' + d.destination_icao + ')' : d.destination_icao}</td>
-                              <td style={{ padding: '4px 8px', fontWeight: 600 }}>{d.flight_number || '-'}</td>
-                              <td style={{ padding: '4px 8px', color: '#38bdf8' }}>{d.departure_time ? (() => { const ts = d.departure_time; if (!ts) return '-'; const m = ts.match(/(\d{1,2}):(\d{2})/); if (m) return m[1] + ':' + m[2]; return ts.includes(':') ? ts.split(':').slice(0,2).join(':') : '-'; })() : '-'}</td>
-                              <td style={{ padding: '4px 8px', color: '#4ade80' }}>{d.arrival_time ? (() => { const ts = d.arrival_time; if (!ts) return '-'; const m = ts.match(/(\d{1,2}):(\d{2})/); if (m) return m[1] + ':' + m[2]; return ts.includes(':') ? ts.split(':').slice(0,2).join(':') : '-'; })() : '-'}</td>
-                              <td style={{ padding: '4px 8px', color: '#818cf8' }}>{d.duration_minutes ? d.duration_minutes + ' min' : '-'}</td>
-                            </tr>)}
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>) : <span style={{ color: "#94a3b8", fontSize: 13 }}>Click to expand</span>}
-                    </div>
-                  </div>
-                );
-              })}
-              {!list.length && <div style={{ color: '#94a3b8', fontSize: 14 }}>No airports saved yet.</div>}
-            </section>
-          )}
-
-          {tab === 'trips' && (
-            <section style={{
-              background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)',
-              borderRadius: 18, padding: 24, boxShadow: '0 10px 30px rgba(0,0,0,0.2)'
-            }}>
-              <h3 style={{ margin: '0 0 14px', fontSize: 18, fontWeight: 700, color: '#f8fafc' }}>Trip Turnaround Finder</h3>
-              <p style={{ color: '#94a3b8', fontSize: 14, marginBottom: 18 }}>Find possible trip combinations based on date ranges and weekday preferences.</p>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 18, marginBottom: 18 }}>
-                <div style={{ background: 'rgba(255,255,255,0.03)', borderRadius: 14, padding: 16, border: '1px solid rgba(255,255,255,0.06)' }}>
-                  <label style={{ fontSize: 12, fontWeight: 600, color: '#f8fafc', display: 'block', marginBottom: 6 }}>Airport (Start & End)</label>
-                  <select value={startAirport} onChange={e => { setStartAirport(e.target.value); setEndAirport(e.target.value); }} style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.15)', background: 'rgba(255,255,255,0.06)', color: '#f8fafc', fontSize: 13, maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                    <option value="">Select airport</option>
-                    {list.map(c => <option key={c} value={c} style={{ color: '#0f172a', background: '#f8fafc' }}>{c}{airportNames[c] ? ' — ' + airportNames[c] : ''}</option>)}
-                  </select>
-                </div>
-                <div style={{ background: 'rgba(255,255,255,0.03)', borderRadius: 14, padding: 16, border: '1px solid rgba(255,255,255,0.06)' }}>
-                  <label style={{ fontSize: 12, fontWeight: 600, color: '#f8fafc', display: 'block', marginBottom: 6 }}>Earliest Trip Start Date</label>
-                  <input type="date" value={tripStart} onChange={e => setTripStart(e.target.value)} style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.15)', background: 'rgba(255,255,255,0.06)', color: '#f8fafc', fontSize: 14, boxSizing: 'border-box', maxWidth: '100%' }} />
-                </div>
-                <div style={{ background: 'rgba(255,255,255,0.03)', borderRadius: 14, padding: 16, border: '1px solid rgba(255,255,255,0.06)' }}>
-                  <label style={{ fontSize: 12, fontWeight: 600, color: '#f8fafc', display: 'block', marginBottom: 6 }}>Latest Trip End Date</label>
-                  <input type="date" value={tripEnd} onChange={e => setTripEnd(e.target.value)} style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.15)', background: 'rgba(255,255,255,0.06)', color: '#f8fafc', fontSize: 14, boxSizing: 'border-box', maxWidth: '100%' }} />
-                </div>
-                <div style={{ background: 'rgba(255,255,255,0.03)', borderRadius: 14, padding: 16, border: '1px solid rgba(255,255,255,0.06)' }}>
-                  <label style={{ fontSize: 12, fontWeight: 600, color: '#f8fafc', display: 'block', marginBottom: 6 }}>Start Weekdays</label>
-                  <select multiple value={startWeekdays.map(String)} onChange={e => setStartWeekdays([...e.target.options].filter(o => o.selected).map(o => parseInt(o.value)))} style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.15)', background: 'rgba(255,255,255,0.06)', color: '#f8fafc', fontSize: 13, height: 160, boxSizing: 'border-box', maxWidth: '100%', overflow: 'auto' }}>
-                    <option value="0">Monday</option>
-                    <option value="1">Tuesday</option>
-                    <option value="2">Wednesday</option>
-                    <option value="3">Thursday</option>
-                    <option value="4">Friday</option>
-                    <option value="5">Saturday</option>
-                    <option value="6">Sunday</option>
-                  </select>
-                </div>
-                <div style={{ background: 'rgba(255,255,255,0.03)', borderRadius: 14, padding: 16, border: '1px solid rgba(255,255,255,0.06)' }}>
-                  <label style={{ fontSize: 12, fontWeight: 600, color: '#f8fafc', display: 'block', marginBottom: 6 }}>End Weekdays</label>
-                  <select multiple value={endWeekdays.map(String)} onChange={e => setEndWeekdays([...e.target.options].filter(o => o.selected).map(o => parseInt(o.value)))} style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.15)', background: 'rgba(255,255,255,0.06)', color: '#f8fafc', fontSize: 13, height: 160, boxSizing: 'border-box', maxWidth: '100%', overflow: 'auto' }}>
-                    <option value="0">Monday</option>
-                    <option value="1">Tuesday</option>
-                    <option value="2">Wednesday</option>
-                    <option value="3">Thursday</option>
-                    <option value="4">Friday</option>
-                    <option value="5">Saturday</option>
-                    <option value="6">Sunday</option>
-                  </select>
-                </div>
-                <div style={{ background: 'rgba(255,255,255,0.03)', borderRadius: 14, padding: 16, border: '1px solid rgba(255,255,255,0.06)' }}>
-                  <label style={{ fontSize: 12, fontWeight: 600, color: '#f8fafc', display: 'block', marginBottom: 6 }}>Latest Departure to Destination</label>
-                  <input type="time" value={maxDepToDest} onChange={e => setMaxDepToDest(e.target.value)} style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.15)', background: 'rgba(255,255,255,0.06)', color: '#f8fafc', fontSize: 14, boxSizing: 'border-box', maxWidth: '100%' }} />
-                </div>
-                <div style={{ background: 'rgba(255,255,255,0.03)', borderRadius: 14, padding: 16, border: '1px solid rgba(255,255,255,0.06)' }}>
-                  <label style={{ fontSize: 12, fontWeight: 600, color: '#f8fafc', display: 'block', marginBottom: 6 }}>Earliest Return Departure</label>
-                  <input type="time" value={minRetDep} onChange={e => setMinRetDep(e.target.value)} style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.15)', background: 'rgba(255,255,255,0.06)', color: '#f8fafc', fontSize: 14, boxSizing: 'border-box', maxWidth: '100%' }} />
-                </div>
-                <div style={{ background: 'rgba(255,255,255,0.03)', borderRadius: 14, padding: 16, border: '1px solid rgba(255,255,255,0.06)' }}>
-                  <label style={{ fontSize: 12, fontWeight: 600, color: '#f8fafc', display: 'block', marginBottom: 6 }}>Min Trip Length (days)</label>
-                  <input type="number" min={1} max={30} value={minTripDays} onChange={e => setMinTripDays(parseInt(e.target.value) || 1)} style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.15)', background: 'rgba(255,255,255,0.06)', color: '#f8fafc', fontSize: 14, boxSizing: 'border-box', maxWidth: '100%' }} />
-                </div>
-                <div style={{ background: 'rgba(255,255,255,0.03)', borderRadius: 14, padding: 16, border: '1px solid rgba(255,255,255,0.06)' }}>
-                  <label style={{ fontSize: 12, fontWeight: 600, color: '#f8fafc', display: 'block', marginBottom: 6 }}>Max Trip Length (days)</label>
-                  <input type="number" min={1} max={30} value={maxTripDays} onChange={e => setMaxTripDays(parseInt(e.target.value) || 1)} style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.15)', background: 'rgba(255,255,255,0.06)', color: '#f8fafc', fontSize: 14, boxSizing: 'border-box', maxWidth: '100%' }} />
-                </div>
-              </div>
-              <div style={{ marginBottom: 14, display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-              </div>
-              {turnarounds.length > 0 && (() => {
-                const groups = {};
-                turnarounds.forEach(t => { const key = t.hinflug_ziel || t.destination || '-'; if (!groups[key]) groups[key] = []; groups[key].push(t); });
-                const groupKeys = Object.keys(groups).sort();
-                return (
-                  <div style={{ background: 'rgba(255,255,255,0.03)', borderRadius: 14, padding: 16, border: '1px solid rgba(255,255,255,0.08)' }}>
-                    <h4 style={{ margin: '0 0 10px', fontSize: 15, fontWeight: 700, color: '#f8fafc' }}>Possible Turnarounds</h4>
-                    {groupKeys.map(key => {
-                      const group = groups[key];
-                      const isOpen = !!expanded['trip_' + key];
-                      return (
-                        <div key={key} style={{ marginBottom: 10, border: '1px solid rgba(255,255,255,0.08)', borderRadius: 10, overflow: 'hidden' }}>
-                          <button onClick={() => toggle('trip_' + key)} style={{ width: '100%', textAlign: 'left', padding: '10px 14px', background: 'rgba(255,255,255,0.06)', color: '#f8fafc', fontWeight: 700, fontSize: 14, border: 'none', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <span>{(group[0]?.hinflug_ziel_name || airportNames[key] ? (group[0]?.hinflug_ziel_name || airportNames[key] || key) + ' ' : '') + '(' + key + ')'}</span>
-                            <span style={{ color: '#94a3b8', fontWeight: 500 }}>{isOpen ? '▲' : '▼'}</span>
-                          </button>
-                          {isOpen && (
-                            <div style={{ padding: 8 }}>
-                              <button onClick={async () => { if (!confirm('Add all trips in this group to favorites?')) return; for (const t of group) { await fetch('/api/favorites', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({trip_date:t.hinflug_abflug_zeit ? t.hinflug_abflug_zeit.split(' ')[0] : '', outbound_trip_date:t.hinflug_abflug_zeit ? t.hinflug_abflug_zeit.split(' ')[0] : '', return_trip_date:t.rueckflug_abflug_zeit ? t.rueckflug_abflug_zeit.split(' ')[0] : '', start_time:t.hinflug_abflug_zeit ? t.hinflug_abflug_zeit.split(' ')[1] || '' : '', destination_airport: t.destination || t.hinflug_ziel || '', outbound_flight_number:t.hinflug_flight_number || '', return_flight_number:t.rueckflug_flight_number || '', start_airport: startAirport || '', return_time: t.rueckflug_abflug_zeit ? t.rueckflug_abflug_zeit.split(' ')[1] || '' : ''})}); const idx = turnarounds.indexOf(t); if(idx >= 0) { const copy = [...turnarounds]; copy[idx] = {...copy[idx], is_favorite: true}; setTurnarounds(copy); } } }} style={{ padding:'6px 12px', borderRadius:6, border:'none', background:'#10b981', color:'#fff', fontWeight:700, fontSize:12, cursor:'pointer', marginBottom:8, whiteSpace:'nowrap' }}>Add all favorites</button>
-                              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, tableLayout: 'fixed' }}>
-                                <thead><tr style={{ borderBottom: '1px solid rgba(255,255,255,0.12)' }}><th style={{ textAlign: 'left', padding: '6px 8px', color: '#94a3b8' }}>Outbound Flight</th><th style={{ textAlign: 'left', padding: '6px 8px', color: '#94a3b8' }}>Return Flight</th><th style={{ textAlign: 'left', padding: '6px 8px', color: '#94a3b8' }}>Trip Duration</th></tr></thead>
-                                <tbody>
-                                  {group.map((t, i) => (
-                                    <tr key={i} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
-                                      <td style={{ padding: '6px 8px', color: '#f8fafc', fontWeight: 600 }}>
-                                        {(t.hinflug_abflug_zeit ? (t.hinflug_abflug_zeit.substring ? t.hinflug_abflug_zeit.substring(0,10) + ', ' + t.hinflug_abflug_zeit.substring(11,16) : t.hinflug_abflug_zeit.substring(0,10) + ', ' + t.hinflug_abflug_zeit.substring(11,16)) : '-') + ' | ' + (t.hinflug_flight_number || '-')}
-                                      </td>
-                                      <td style={{ padding: '6px 8px', color: '#f8fafc', fontWeight: 600 }}>
-                                        {(t.rueckflug_abflug_zeit ? (t.rueckflug_abflug_zeit.substring ? t.rueckflug_abflug_zeit.substring(0,10) + ', ' + t.rueckflug_abflug_zeit.substring(11,16) : t.rueckflug_abflug_zeit.substring(0,10) + ', ' + t.rueckflug_abflug_zeit.substring(11,16)) : '-') + ' | ' + (t.rueckflug_flight_number || '-')}
-                                      </td>
-                                      <td style={{ padding: '6px 8px', color: '#38bdf8' }}>{(t.dauer_tage !== undefined ? t.dauer_tage + 'd' : (t.days ? t.days + 'd' : '-'))}</td>
-                                      <td style={{ padding: '6px 8px' }}><button onClick={async () => { const res = await fetch('/api/favorites', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({trip_date:t.hinflug_abflug_zeit ? t.hinflug_abflug_zeit.split(' ')[0] : '', outbound_trip_date:t.hinflug_abflug_zeit ? t.hinflug_abflug_zeit.split(' ')[0] : '', return_trip_date:t.rueckflug_abflug_zeit ? t.rueckflug_abflug_zeit.split(' ')[0] : '', start_time:t.hinflug_abflug_zeit ? t.hinflug_abflug_zeit.split(' ')[1] || '' : '', destination_airport: t.destination || t.hinflug_ziel || '', outbound_flight_number:t.hinflug_flight_number || '', return_flight_number:t.rueckflug_flight_number || '', start_airport: startAirport || '', return_time: t.rueckflug_abflug_zeit ? t.rueckflug_abflug_zeit.split(' ')[1] || '' : ''})}); if(res.ok) { const idx = turnarounds.indexOf(t); if(idx >= 0) { const copy = [...turnarounds]; copy[idx] = {...copy[idx], is_favorite: true}; setTurnarounds(copy); } } }} style={{ padding:'4px 8px', borderRadius:6, border:'none', background: t.is_favorite ? '#38bdf8' : '#1e293b', color:'#fff', fontWeight:600, fontSize:12, cursor:'pointer', minWidth:110 }}>{t.is_favorite ? '★ Favorited' : '+ Add to favorites'}</button></td>
-                                    </tr>
-                                  ))}
-                                </tbody>
-                              </table>
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                );
-              })()}
-            </section>
-          )}
+          {tab === 'trips' && <TripsTab list={list} airportNames={airportNames} />}
 
           {tab === 'favorites' && (
             <section style={{
@@ -622,66 +129,13 @@ export default function App() {
             </section>
           )}
 
-          {tab === 'settings' && (
-            <section style={{
-              background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)',
-              borderRadius: 18, padding: 24, boxShadow: '0 10px 30px rgba(0,0,0,0.2)'
-            }}>
-              <h3 style={{ margin: '0 0 14px', fontSize: 18, fontWeight: 700, color: '#f8fafc' }}>API Settings</h3>
-              <p style={{ color: '#94a3b8', fontSize: 14, marginBottom: 16 }}>Configure max fetch months and scrape delay.</p>
-              <form onSubmit={async (e) => {
-                e.preventDefault();
-                const body = {
-                  fetch_max_months: settings.fetch_max_months || document.getElementById('fetchMaxMonths')?.value || 7,
-                  scrape_delay_ms: settings.scrape_delay_ms || document.getElementById('delayMs')?.value || '500',
-                  price_fetch_interval_hours: settings.price_fetch_interval_hours || document.getElementById('priceIntervalHours')?.value || '6',
-                  google_consent_cookie: settings.google_consent_cookie || document.getElementById('consentCookie')?.value || 'CAESHAgBEhJnd3NfMjAyMzA4MTAtMF9SQzIaAmRlIAEaBgiAo_CmBg'
-                };
-                const res = await fetch('/api/settings', {
-                  method: 'POST',
-                  headers: {'Content-Type':'application/json'},
-                  body: JSON.stringify(body)
-                });
-                if (res.ok) {
-                  alert('Settings saved');
-                  setSettings({ fetch_max_months: body.fetch_max_months, scrape_delay_ms: body.scrape_delay_ms, price_fetch_interval_hours: body.price_fetch_interval_hours, google_consent_cookie: body.google_consent_cookie });
-                } else {
-                  alert('Failed to save');
-                }
-              }} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                  <label htmlFor="fetchMaxMonths" style={{ fontSize: 13, fontWeight: 600, color: '#f8fafc' }}>Max Fetch Months (1-12)</label>
-                  <input id="fetchMaxMonths" type="number" min="1" max="12" value={settings.fetch_max_months || '1'} onChange={e => setSettings(s => ({...s, fetch_max_months: e.target.value}))} placeholder="Months" style={{ padding: "10px 14px", borderRadius: 10, border: "1px solid rgba(255,255,255,0.15)", background: "rgba(255,255,255,0.06)", color: "#f8fafc", fontSize: 15, width: '100%', maxWidth: 420, outline: "none" }} />
-                  <span style={{ fontSize: 12, color: '#94a3b8', lineHeight: 1.5, maxWidth: 360 }}>
-                    The parameter <code>fetch_max_months</code> controls how many months ahead flight data is fetched. It is globally shared between all airports.
-                  </span>
-                </div>
-                <div style={{ marginTop: 20, borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: 16 }}>
-                  <h4 style={{ margin: '0 0 10px', fontSize: 15, fontWeight: 600, color: '#f8fafc' }}>Price Update Interval (Hours)</h4>
-                  <p style={{ color: '#94a3b8', fontSize: 13, marginBottom: 10 }}>How often favorite prices are updated automatically. Default 6h.</p>
-                  <input id="priceIntervalHours" type="number" min="1" max="168" value={settings.price_fetch_interval_hours || '6'} onChange={e => setSettings(s => ({...s, price_fetch_interval_hours: e.target.value}))} placeholder="Hours" style={{ padding: '8px 12px', borderRadius: 10, border: '1px solid rgba(255,255,255,0.15)', background: 'rgba(255,255,255,0.06)', color: '#f8fafc', fontSize: 14, width: 140 }} />
-                </div>
-                <div style={{ marginTop: 20, borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: 16 }}>
-                  <h4 style={{ margin: '0 0 10px', fontSize: 15, fontWeight: 600, color: '#f8fafc' }}>Scrape Delay (ms)</h4>
-                  <p style={{ color: '#94a3b8', fontSize: 13, marginBottom: 10 }}>Delay between kayak requests in milliseconds.</p>
-                  <input id="delayMs" type="number" min="0" max="5000" value={settings.scrape_delay_ms || '500'} onChange={e => setSettings(s => ({...s, scrape_delay_ms: e.target.value}))} placeholder="ms" style={{ padding: '8px 12px', borderRadius: 10, border: '1px solid rgba(255,255,255,0.15)', background: 'rgba(255,255,255,0.06)', color: '#f8fafc', fontSize: 14, width: 140 }} />
-                </div>
-                                  <div style={{ marginTop: 20, borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: 16 }}>
-                    <h4 style={{ margin: '0 0 10px', fontSize: 15, fontWeight: 600, color: '#f8fafc' }}>Google Consent Cookie (SOCS)</h4>
-                    <p style={{ color: '#94a3b8', fontSize: 13, marginBottom: 10 }}>Cookie-Wert für EU-Consent (Alle ablehnen).</p>
-                    <input id="consentCookie" type="text" value={settings.google_consent_cookie || 'CAESHAgBEhJnd3NfMjAyMzA4MTAtMF9SQzIaAmRlIAEaBgiAo_CmBg'} onChange={e => setSettings(s => ({...s, google_consent_cookie: e.target.value}))} placeholder="SOCS Cookie Wert" style={{ padding: '8px 12px', borderRadius: 10, border: '1px solid rgba(255,255,255,0.15)', background: 'rgba(255,255,255,0.06)', color: '#f8fafc', fontSize: 14, width: '100%', maxWidth: 520, outline: 'none' }} />
-                  </div>
-                  <button type="submit" style={{
-                  marginTop: 8, padding: '10px 18px', borderRadius: 10, border: 'none',
-                  background: 'linear-gradient(135deg, #38bdf8, #818cf8)',
-                  color: '#0f172a', fontWeight: 700, fontSize: 15, cursor: 'pointer', alignSelf: 'flex-start'
-                }}>Save</button>
-              </form>
-            </section>
-          )}
+          {tab === 'airports' && <AirportsTab list={list} setList={setList} />}
+
+          {tab === 'flights' && <FlightsTab list={list} onFetchNow={handleFetchNow} fetchRunning={scrapeRunning} />}
+
+          {tab === 'settings' && <SettingsTab />}
         </div>
       </main>
     </div>
   );
 }
-

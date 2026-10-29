@@ -1,5 +1,6 @@
-"""DB migration tests: v11 must reach and persist, drop the stale columns,
-recreate the unique index, be idempotent, and run cleanly as a script.
+"""DB migration tests: v12 must reach and persist, the stale favorite columns
+must be dropped, the unique index recreated, the run be idempotent, and the
+module run cleanly as a script.
 """
 import os
 import pathlib
@@ -14,7 +15,6 @@ def _fresh_db(tmp_path):
     db = str(tmp_path / "mig.db")
     if pathlib.Path(db).exists():
         pathlib.Path(db).unlink()
-    m.DB_FILE = db
     return db
 
 
@@ -32,15 +32,15 @@ def _version(db):
     return v
 
 
-def test_fresh_db_reaches_v11(tmp_path):
+def test_fresh_db_reaches_latest(tmp_path):
     db = _fresh_db(tmp_path)
-    m.apply_migrations()
-    assert _version(db) == 11
+    m.apply_migrations(db)
+    assert _version(db) == 12
 
 
 def test_v11_drops_stale_columns(tmp_path):
     db = _fresh_db(tmp_path)
-    m.apply_migrations()
+    m.apply_migrations(db)
     cols = _cols(db)
     for c in ("start_time", "return_time", "trip_date"):
         assert c not in cols, f"{c} should have been dropped by v11"
@@ -48,18 +48,51 @@ def test_v11_drops_stale_columns(tmp_path):
 
 def test_v11_recreates_unique_index(tmp_path):
     db = _fresh_db(tmp_path)
-    m.apply_migrations()
+    m.apply_migrations(db)
     conn = sqlite3.connect(db)
     idx = {r[1] for r in conn.execute("PRAGMA index_list(favorite_trips)")}
     conn.close()
     assert "idx_favorite_unique" in idx
 
 
+def test_fresh_db_has_full_flights_schema(tmp_path):
+    # Schema is owned by db_migrate, not by runtime mutation in the scraper:
+    # the scraper-era columns must already exist on a fresh DB.
+    db = _fresh_db(tmp_path)
+    m.apply_migrations(db)
+    cols = _cols(db, "flights")
+    for c in ("from_icao", "to_icao", "flight_date", "arrival_date",
+              "departure", "arrival", "month_key"):
+        assert c in cols, f"{c} should be part of the migrated flights schema"
+    conn = sqlite3.connect(db)
+    idx = {r[1] for r in conn.execute("PRAGMA index_list(flights)")}
+    conn.close()
+    assert "idx_flights_airport_month" in idx
+
+
+def test_partial_v11_db_upgraded_to_v12(tmp_path):
+    # An existing DB that reached v11 (e.g. before the unification) must be
+    # upgraded to v12 by adding the missing columns, without data loss.
+    db = _fresh_db(tmp_path)
+    m.apply_migrations(db)
+    # Simulate an older DB that stops at v11.
+    conn = sqlite3.connect(db)
+    conn.execute("DELETE FROM db_version")
+    conn.execute("INSERT INTO db_version (version) VALUES (11)")
+    conn.commit()
+    conn.close()
+    m.apply_migrations(db)
+    assert _version(db) == 12
+    cols = _cols(db, "flights")
+    for c in ("flight_date", "arrival_date", "departure", "arrival", "month_key"):
+        assert c in cols, f"{c} should be added by v12"
+
+
 def test_migration_is_idempotent(tmp_path):
     db = _fresh_db(tmp_path)
-    m.apply_migrations()
-    m.apply_migrations()  # must not raise on a second run
-    assert _version(db) == 11
+    m.apply_migrations(db)
+    m.apply_migrations(db)  # must not raise on a second run
+    assert _version(db) == 12
 
 
 def test_migrate_runs_as_script(tmp_path):
@@ -74,4 +107,4 @@ def test_migrate_runs_as_script(tmp_path):
         cwd=str(pathlib.Path.cwd()),
     )
     assert res.returncode == 0, f"stderr: {res.stderr}"
-    assert _version(db) == 11
+    assert _version(db) == 12

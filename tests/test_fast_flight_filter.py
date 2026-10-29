@@ -1,6 +1,4 @@
 """Tests für fast-flight Uhrzeit-/Flugnummer-Filter (vor Implementierung)."""
-import pytest
-from unittest.mock import MagicMock, patch
 
 def test_fetch_prices_uses_flight_no_filter():
     """Wenn Favorit flight_number hat, muss Abfrage ihn berücksichtigen."""

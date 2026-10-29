@@ -2,10 +2,9 @@ import logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 
 from datetime import datetime, timedelta, timezone
-from datetime import time as dt_time
 import os
-import sqlite3
 import threading
+from zoneinfo import ZoneInfo
 
 # Standard + third-party
 import airportsdata
@@ -15,10 +14,11 @@ from flask import Flask, request, jsonify, send_from_directory
 # Project modules
 from skybreak.airport import add_airport, delete_airport, validate_iata
 from skybreak.airport_lookup import fetch_airport_name, fetch_city_country
+from skybreak.db import connect_db, get_setting, set_setting
+from skybreak.db_migrate import apply_migrations
 
 # Configurable paths for testing vs production
 FRONTEND_BUILD_DIR = os.environ.get("FRONTEND_BUILD_DIR", "/app/frontend/build")
-DB_PATH = os.environ.get("DB_FILE", "/data/skybreak.db")
 
 # Cache state (lazily warmed by _preload_airport_cache after migrations)
 _airport_lookup_cache: dict[str, str] = {}
@@ -28,9 +28,7 @@ _city_lookup_cache: dict[str, str] = {}
 def _preload_airport_cache() -> None:
     """Warm the airport-name cache from the DB. Safe to call even if empty."""
     try:
-        conn = sqlite3.connect(
-            os.environ.get("DB_FILE", "/data/skybreak.db"), timeout=5.0,
-        )
+        conn = connect_db(timeout=5.0)
         for row in conn.execute("SELECT code, name FROM airports").fetchall():
             _airport_lookup_cache[row[0]] = row[1] or row[0]
         conn.close()
@@ -54,19 +52,24 @@ def _cached_fetch_city_country(code):
         _city_lookup_cache[code] = fetch_city_country(code)
     return _city_lookup_cache[code]
 
+def _tz_for(code, airports):
+    """Timezone for an airport code, or None if unknown."""
+    a = airports.get(code)
+    return ZoneInfo(a["tz"]) if a and a.get("tz") else None
+
 _scrape_lock = threading.Lock()
 _scrape_in_progress = False
 _price_lock = threading.Lock()
 _price_in_progress = False
 
-# Apply DB migrations at module load time so every route works after startup.
-from skybreak.db_migrate import apply_migrations
-
+# Ensure schema exists before serving requests. The earlier _preload_airport_cache
+# call is harmless on a fresh DB (it catches the "no table yet" case and the
+# lookup caches fill lazily afterward).
 apply_migrations()
 
 @app.route("/api/airports", methods=["GET"])
 def list_airports():
-    conn = sqlite3.connect(DB_PATH, timeout=30.0)
+    conn = connect_db()
     rows = conn.execute("SELECT code, name FROM airports").fetchall()
     conn.close()
     return jsonify([{"code": r[0], "name": r[1] or ""} for r in rows])
@@ -95,7 +98,7 @@ def index(path=""):
 @app.route("/api/flights", methods=["GET"])
 def list_flights():
     airport = request.args.get("airport", "").strip().upper()
-    conn = sqlite3.connect(DB_PATH, timeout=30.0)
+    conn = connect_db()
     sql = "SELECT airport_icao, airport_name, destination_icao, destination_name, flight_direction, departure_time, arrival_time, duration_minutes, flight_number FROM flights WHERE departure_time >= datetime('now','utc') AND departure_time <= datetime('now', '+365 days')"
     params = []
     if airport:
@@ -134,12 +137,11 @@ def list_flights():
 
 @app.route("/api/flights/future", methods=["GET"])
 def future_flights_info():
-    conn = sqlite3.connect(DB_PATH, timeout=30.0)
+    conn = connect_db()
     # For each airport shown in flights page, compute max departure_time from DB
     rows = conn.execute("SELECT airport_icao, MAX(departure_time) FROM flights WHERE departure_time >= datetime('now','utc') GROUP BY airport_icao").fetchall()
     conn.close()
     result = {}
-    from datetime import datetime
     max_day = None
     for airport_icao, max_time_str in rows:
         if max_time_str:
@@ -169,7 +171,7 @@ def price_history():
         favorite_id = int(favorite_id)
     except Exception:
         return jsonify({"error": "invalid trip_id"}), 400
-    conn = sqlite3.connect(DB_PATH, timeout=30.0)
+    conn = connect_db()
     rows = conn.execute(
     "SELECT date(fetched_at) AS date, price_outbound, price_return, price_total FROM favorite_trip_prices WHERE favorite_id = ? ORDER BY fetched_at ASC",
     (favorite_id,)
@@ -189,7 +191,6 @@ def fetch_now():
             return jsonify({"fetched": False, "message": "Fetch already in progress"}), 409
         _scrape_in_progress = True
     from skybreak.scraper_job import scrape_all_airports
-    import threading
     def _run():
         global _scrape_in_progress
         try:
@@ -209,13 +210,11 @@ def scrape_status():
 
 @app.route("/api/settings/check", methods=["GET"])
 def settings_check():
-    from skybreak.airport import get_setting
     max_m = get_setting("fetch_max_months") or get_setting("fetch_max_days") or ""
     return jsonify({"fetch_max_months_set": bool(max_m and max_m.strip()), "value": max_m or None})
 
 @app.route("/api/settings/delay-ms", methods=["GET", "POST"])
 def settings_delay_ms():
-    from skybreak.airport import get_setting, set_setting
     if request.method == "POST":
         data = request.get_json(force=True)
         val = data.get("delay_ms")
@@ -230,7 +229,6 @@ def settings_delay_ms():
 
 @app.route("/api/settings", methods=["GET", "POST"])
 def settings():
-    from skybreak.airport import get_setting, set_setting
     if request.method == "POST":
         data = request.get_json(force=True)
         for k, v in data.items():
@@ -240,7 +238,7 @@ def settings():
                 set_setting(str(k), str(v))
         return jsonify({"updated": True})
     else:
-        conn = sqlite3.connect(DB_PATH, timeout=30.0)
+        conn = connect_db()
         rows = conn.execute("SELECT key, value FROM settings").fetchall()
         conn.close()
         return jsonify({r[0]: r[1] for r in rows})
@@ -249,7 +247,7 @@ def settings():
 @app.route("/api/favorites", methods=["POST"])
 def create_favorite():
     data = request.get_json() or {}
-    conn = sqlite3.connect(DB_PATH, timeout=30.0)
+    conn = connect_db()
     conn.execute("INSERT OR IGNORE INTO favorite_trips (destination_airport, outbound_flight_number, return_flight_number, start_airport, outbound_trip_date, return_trip_date) VALUES (?, ?, ?, ?, ?, ?)", (
         data.get("destination_airport") or "",
         data.get("outbound_flight_number") or "",
@@ -266,7 +264,7 @@ def create_favorite():
 # Batch helper (weiter optimieren)
 @app.route("/api/favorites", methods=["GET"])
 def list_favorites():
-    conn = sqlite3.connect(DB_PATH, timeout=30.0)
+    conn = connect_db()
     rows = conn.execute("SELECT id, destination_airport, outbound_flight_number, return_flight_number, start_airport, created_at, outbound_trip_date, return_trip_date FROM favorite_trips ORDER BY created_at DESC").fetchall()
     conn.close()
     from skybreak.flight_prices import get_prices_for_favorite
@@ -282,7 +280,7 @@ def list_favorites():
         out_trip_date = r[6] or ''
         ret_trip_date = r[7] or ''
         out_dep = out_arr = ret_dep = ret_arr = out_flight = ret_flight = None
-        conn2 = sqlite3.connect(DB_PATH, timeout=30.0)
+        conn2 = connect_db()
         try:
             if out_trip_date and start_airport and dest_airport and out_fnum:
                 row_out = conn2.execute(
@@ -306,11 +304,6 @@ def list_favorites():
         duration_out = None
         if out_dep and out_arr:
             try:
-                from datetime import datetime, timedelta
-                from zoneinfo import ZoneInfo
-                def tz_for(code):
-                    a = _AIRPORTS.get(code)
-                    return ZoneInfo(a["tz"]) if a and a.get("tz") else None
                 dep_str = str(out_dep)
                 arr_str = str(out_arr)
                 # Datum und Zeit extrahieren
@@ -318,12 +311,11 @@ def list_favorites():
                 arr_date = arr_str[:10] if len(arr_str) >= 10 else arr_str.split()[0] if " " in arr_str else None
                 dep_t_str = dep_str[11:16] if len(dep_str) >= 16 else dep_str.split()[1] if " " in dep_str else "00:00"
                 arr_t_str = arr_str[11:16] if len(arr_str) >= 16 else arr_str.split()[1] if " " in arr_str else "00:00"
-                from datetime import time as dt_time
                 dep_t = datetime.strptime(dep_t_str, "%H:%M").time()
                 arr_t = datetime.strptime(arr_t_str, "%H:%M").time()
                 # Zeitzonen
-                tz_start = tz_for(start_airport) if start_airport else None
-                tz_dest = tz_for(dest_airport) if dest_airport else None
+                tz_start = _tz_for(start_airport, _AIRPORTS) if start_airport else None
+                tz_dest = _tz_for(dest_airport, _AIRPORTS) if dest_airport else None
                 if dep_date and arr_date and (tz_start or tz_dest):
                     dep_date_obj = datetime.strptime(dep_date, "%Y-%m-%d").date()
                     arr_date_obj = datetime.strptime(arr_date, "%Y-%m-%d").date()
@@ -343,11 +335,6 @@ def list_favorites():
         duration_ret = None
         if ret_dep and ret_arr:
             try:
-                from datetime import datetime, timedelta
-                from zoneinfo import ZoneInfo
-                def tz_for(code):
-                    a = _AIRPORTS.get(code)
-                    return ZoneInfo(a["tz"]) if a and a.get("tz") else None
                 # Rückflug: Start = dest_airport, Ziel = start_airport
                 dep_str = str(ret_dep)
                 arr_str = str(ret_arr)
@@ -357,8 +344,8 @@ def list_favorites():
                 arr_t_str = arr_str[11:16] if len(arr_str) >= 16 else arr_str.split()[1] if " " in arr_str else "00:00"
                 dep_t = datetime.strptime(dep_t_str, "%H:%M").time()
                 arr_t = datetime.strptime(arr_t_str, "%H:%M").time()
-                tz_start = tz_for(dest_airport) if dest_airport else None
-                tz_dest = tz_for(start_airport) if start_airport else None
+                tz_start = _tz_for(dest_airport, _AIRPORTS) if dest_airport else None
+                tz_dest = _tz_for(start_airport, _AIRPORTS) if start_airport else None
                 if dep_date and arr_date and (tz_start or tz_dest):
                     dep_date_obj = datetime.strptime(dep_date, "%Y-%m-%d").date()
                     arr_date_obj = datetime.strptime(arr_date, "%Y-%m-%d").date()
@@ -387,7 +374,7 @@ def list_favorites():
 
 @app.route("/api/favorites/<int:fav_id>", methods=["DELETE"])
 def delete_favorite(fav_id):
-    conn = sqlite3.connect(DB_PATH, timeout=30.0)
+    conn = connect_db()
     conn.execute("DELETE FROM favorite_trips WHERE id = ?", (fav_id,))
     conn.commit()
     conn.close()
@@ -408,11 +395,10 @@ def update_prices():
             return jsonify({"updated": False, "message": "Preisaktualisierung bereits aktiv", "running": True}), 409
         _price_in_progress = True
     from skybreak.flight_prices import fetch_prices_favorite
-    import threading
     def _run_prices():
         global _price_in_progress
         try:
-            conn = sqlite3.connect(DB_PATH, timeout=30.0)
+            conn = connect_db()
             rows = conn.execute("SELECT id FROM favorite_trips").fetchall()
             conn.close()
             for (fav_id,) in rows:
@@ -491,7 +477,7 @@ def find_short_trips():
     end_days_str = ','.join(str(d) for d in end_days)
 
     # 1. SQL-Abfrage Hinflüge (Abflüge vom Startflughafen)
-    conn = sqlite3.connect(DB_PATH, timeout=30.0)
+    conn = connect_db()
     sql_hin = f"""SELECT id, to_icao AS ziel, flight_number, departure_time AS abflug_zeit
                    FROM flights
                    WHERE airport_icao = ?
@@ -565,27 +551,34 @@ def find_short_trips():
             })
     ergebnisse.sort(key=lambda x: x.get("hinflug_abflug_zeit", ""))
     # Favoriten-Status ergänzen
-    conn = sqlite3.connect(DB_PATH, timeout=30.0)
+    conn = connect_db()
     fav_rows = conn.execute("SELECT outbound_trip_date, destination_airport, outbound_flight_number, return_flight_number, return_trip_date FROM favorite_trips").fetchall()
     conn.close()
-    fav_set = set()
-    for r in fav_rows:
-        out_date = r[0] or ''
-        ret_date = r[4] or ''
-        fav_set.add((out_date, r[1], r[2], r[3], ret_date, r[3]))  # out_date, dest, out_f, ret_f, ret_date, ret_f
+    # Each favorite keyed by (out_date, dest, out_f, ret_f, ret_date). The old
+    # tuple duplicated the return flight number in place of the return date and
+    # the match only compared the first four fields, so a favorite with a
+    # concrete return date flagged turnarounds returning on any other day.
+    fav_set = {
+        (r[0] or '', r[1] or '', r[2] or '', r[3] or '', r[4] or '')
+        for r in fav_rows
+    }
     for item in ergebnisse:
         trip_date = str(item.get("hinflug_abflug_zeit", "")).split()[0] if item.get("hinflug_abflug_zeit") else ""
+        turn_ret_date = str(item.get("rueckflug_abflug_zeit", "")).split()[0] if item.get("rueckflug_abflug_zeit") else ""
         dest = item.get("hinflug_ziel") or item.get("destination") or ""
         out_f = item.get("hinflug_flight_number") or ""
         ret_f = item.get("rueckflug_flight_number") or ""
-        ret_date_guess = trip_date
-        # Prüfe sowohl mit als auch ohne separate Rückflug-Daten
-        item["is_favorite"] = False
-        for fav in fav_set:
-            # fav = (out_date, dest, out_f, ret_f, ret_date, ret_f2) — ret_f == ret_f2
-            if (trip_date == fav[0] or trip_date == '') and dest == fav[1] and out_f == fav[2] and ret_f == fav[3]:
-                item["is_favorite"] = True
-                break
+        # Match is exact on dest / outbound / return flight; an empty favorite
+        # return date stays permissive, otherwise the turnaround must return on
+        # the day the favorite expects.
+        item["is_favorite"] = any(
+            (fav[0] == trip_date or trip_date == '') and
+            (fav[1] == dest) and
+            (fav[2] == out_f) and
+            (fav[3] == ret_f) and
+            (fav[4] == '' or turn_ret_date == fav[4])
+            for fav in fav_set
+        )
     return jsonify({"turnarounds": ergebnisse, "count": len(ergebnisse), "algorithm": "sql_filter_hash_join"})
 
 @app.route("/api/prices/missing", methods=["POST"])
@@ -596,11 +589,10 @@ def update_missing_prices():
             return jsonify({"updated": False, "message": "Preisaktualisierung bereits aktiv", "running": True}), 409
         _price_in_progress = True
     from skybreak.flight_prices import fetch_prices_favorite
-    import threading
     def _run_missing():
         global _price_in_progress
         try:
-            conn = sqlite3.connect(DB_PATH, timeout=30.0)
+            conn = connect_db()
             rows = conn.execute("SELECT DISTINCT ft.id FROM favorite_trips ft LEFT JOIN favorite_trip_prices ftp ON ft.id = ftp.favorite_id WHERE ftp.favorite_id IS NULL OR ftp.price_outbound IS NULL OR ftp.price_return IS NULL").fetchall()
             conn.close()
             for (fav_id,) in rows:
