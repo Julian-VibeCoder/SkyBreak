@@ -1,4 +1,4 @@
-import sqlite3, os, pytest, sys
+import os, pytest, sys
 sys.path.insert(0, '.')
 from skybreak.app import app
 

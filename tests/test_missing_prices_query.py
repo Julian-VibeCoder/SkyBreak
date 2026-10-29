@@ -15,8 +15,7 @@ QUERY = (
 
 def test_missing_prices_query_is_valid(tmp_path):
     db = str(tmp_path / "mp.db")
-    m.DB_FILE = db
-    m.apply_migrations()
+    m.apply_migrations(db)
     conn = sqlite3.connect(db)
     # Must run without error (favorite_trip_prices has no `id` column).
     assert conn.execute(QUERY).fetchall() == []

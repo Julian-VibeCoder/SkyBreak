@@ -7,11 +7,11 @@ Rules:
   * Runtime uses only this module (``apply_migrations``); no separate init scripts.
 """
 import logging
-import os
 import sqlite3
 
+from skybreak.db import db_path
+
 logger = logging.getLogger(__name__)
-DB_FILE = os.environ.get("DB_FILE", "/data/skybreak.db")
 
 # Settings that are safe to keep across restarts; everything else is purged so
 # stale/renamed keys don't linger in the settings table.
@@ -48,6 +48,13 @@ def _favorite_cols(conn):
         return set()
 
 
+def _table_cols(conn, table):
+    try:
+        return {r[1] for r in conn.execute(f"PRAGMA table_info({table})").fetchall()}
+    except sqlite3.OperationalError:
+        return set()
+
+
 def _drop_indexes_referencing(conn, table, columns):
     """Drop every index on `table` that references any of `columns`."""
     import re
@@ -75,12 +82,15 @@ def migration_v1(conn):
         cols = set()
     full = {"id", "airport_icao", "airport_name", "destination_icao", "destination_name",
             "flight_direction", "departure_time", "arrival_time", "duration_minutes",
-            "flight_number", "from_icao", "to_icao", "created_at"}
+            "flight_number", "from_icao", "to_icao", "created_at",
+            "flight_date", "arrival_date", "departure", "arrival", "month_key"}
     flights_ddl = ("CREATE TABLE flights (id INTEGER PRIMARY KEY AUTOINCREMENT, "
                    "airport_icao TEXT, airport_name TEXT, destination_icao TEXT, "
                    "destination_name TEXT, flight_direction TEXT, departure_time TEXT, "
                    "arrival_time TEXT, duration_minutes INTEGER, flight_number TEXT, "
-                   "from_icao TEXT, to_icao TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)")
+                   "from_icao TEXT, to_icao TEXT, flight_date TEXT, arrival_date TEXT, "
+                   "departure TEXT, arrival TEXT, month_key TEXT, "
+                   "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)")
     if cols and not full.issubset(cols):
         conn.execute("ALTER TABLE flights RENAME TO flights_old")
         conn.execute(flights_ddl)
@@ -88,7 +98,8 @@ def migration_v1(conn):
             common = [c for c in
                      ("airport_icao", "airport_name", "destination_icao", "destination_name",
                       "flight_direction", "departure_time", "arrival_time", "duration_minutes",
-                      "flight_number", "from_icao", "to_icao")
+                      "flight_number", "from_icao", "to_icao", "month_key", "flight_date",
+                      "arrival_date", "departure", "arrival")
                      if c in cols]
             common_str = ", ".join(common) if common else "airport_icao"
             conn.execute(
@@ -101,6 +112,7 @@ def migration_v1(conn):
         conn.execute(flights_ddl.replace("CREATE TABLE flights", "CREATE TABLE IF NOT EXISTS flights"))
     conn.execute("CREATE INDEX IF NOT EXISTS idx_flights_airport ON flights (airport_icao, departure_time)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_fluege_matching ON flights (airport_icao, to_icao, departure_time)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_flights_airport_month ON flights (airport_icao, month_key)")
     conn.execute("CREATE TABLE IF NOT EXISTS db_version (version INTEGER PRIMARY KEY)")
     _bump(conn, 1)
 
@@ -208,15 +220,49 @@ def migration_v11(conn):
     _bump(conn, 11)
 
 
+def migration_v12(conn):
+    """Give `flights` the full scraper-era schema, version-tracked.
+
+    The Kayak scraper previously added these columns (and the month index) at
+    runtime inside the data path. Owning them here removes that runtime mutation
+    and makes the schema identical for a fresh DB and an existing one. Existing
+    rows keep their values (columns are added, not dropped).
+    """
+    cols = _table_cols(conn, "flights")
+    if not cols:
+        # Fresh/absent table: migration_v1 already created the canonical DDL,
+        # which now includes these columns. Nothing more to do.
+        _bump(conn, 12)
+        return
+    for col, col_type in (
+        ("flight_date", "TEXT"),
+        ("arrival_date", "TEXT"),
+        ("departure", "TEXT"),
+        ("arrival", "TEXT"),
+        ("month_key", "TEXT"),
+    ):
+        if col not in cols:
+            conn.execute(f"ALTER TABLE flights ADD COLUMN {col} {col_type}")
+            logger.info("Migration v12: added column %s to flights", col)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_flights_airport_month ON flights (airport_icao, month_key)")
+    _bump(conn, 12)
+
+
 MIGRATIONS = [
     migration_v1, migration_v2, migration_v3, migration_v4, migration_v5,
     migration_v6, migration_v7, migration_v8, migration_v9, migration_v10,
-    migration_v11,
+    migration_v11, migration_v12,
 ]
 
 
-def apply_migrations():
-    conn = sqlite3.connect(DB_FILE, timeout=30.0)
+def apply_migrations(path: str | None = None):
+    """Apply pending migrations to the configured database.
+
+    ``path`` defaults to the shared ``db_path()`` (call-time ``DB_FILE``); pass
+    an explicit path to migrate a specific file without touching the environment.
+    """
+    db_path_ = path or db_path()
+    conn = sqlite3.connect(db_path_, timeout=30.0)
     try:
         current = get_current_version(conn)
         for step_no, migrate in enumerate(MIGRATIONS, start=1):
@@ -235,10 +281,13 @@ def apply_migrations():
             "INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)",
             ("google_consent_cookie", GOOGLE_CONSENT_COOKIE),
         )
+        # Seed the defaults the price scheduler and scraper read on first run.
+        for key, default in (("price_fetch_interval_hours", "6"), ("fetch_max_months", "3")):
+            conn.execute("INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)", (key, default))
         conn.commit()
     finally:
         conn.close()
-    logger.info("DB at version %d", get_current_version(sqlite3.connect(DB_FILE, timeout=30.0)))
+    logger.info("DB at version %d", get_current_version(sqlite3.connect(db_path_, timeout=30.0)))
 
 
 if __name__ == "__main__":

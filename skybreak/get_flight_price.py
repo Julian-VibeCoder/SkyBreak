@@ -4,15 +4,16 @@ Aufruf:
     from flight_price import get_flight_price
     get_flight_price("ARN", "FRA", "2026-10-04", "LH805")  # -> 183.0 oder None
 """
-import json, logging, os, random, re, sqlite3, threading, time
+import json, logging, random, re, threading, time
 from collections import OrderedDict
 
 from fast_flights import FlightQuery, Passengers, create_query
 from primp import Client
 from selectolax.lexbor import LexborHTMLParser
 
+from skybreak.db import connect_db
+
 logger = logging.getLogger(__name__)
-DB_PATH = os.environ.get("DB_FILE", "/data/skybreak.db")
 FLIGHTS_URL = "https://www.google.com/travel/flights"
 
 # Backoff bei 429: 15 s, 45 s, 2:15, 6:45, ~20 min, dann 60 min (je ±20 % Jitter)
@@ -35,7 +36,7 @@ _cache_lock = threading.Lock()
 
 def _load_cookie():
     try:
-        conn = sqlite3.connect(DB_PATH, timeout=5.0)
+        conn = connect_db(timeout=5.0)
         row = conn.execute("SELECT value FROM settings WHERE key='google_consent_cookie'").fetchone()
         conn.close()
         return row[0] if row else None

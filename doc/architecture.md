@@ -28,7 +28,13 @@
    - `airports`: code, name, created_at
    - `flights`: airport_icao, airport_name, destination_icao, destination_name, flight_direction, departure_time, flight_number, year_ahead
    - `settings`: key-value store for API key, fetch intervals, max days
-   - Schema migration on init for older databases
+   - **Access layer** — `skybreak/db.py`: every module opens the DB through
+     `connect_db()` / the `connection()` context manager. The path is read from
+     `DB_FILE` at call time so the test harness can point it at a temp file.
+     `get_setting`/`set_setting` also live here (the `settings` table's home).
+   - **Schema** — `skybreak/db_migrate.py` owns the full schema and applies
+     versioned migrations (`db_version`) at startup, including fresh-DB creation
+     and upgrades of older files. No module performs runtime DDL.
 
 5. **Containerization** (Docker + docker-compose)
    - Multi-stage Dockerfile: builder (Python + Node) → final (Python runtime)

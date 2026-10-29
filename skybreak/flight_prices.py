@@ -1,14 +1,14 @@
 """Preisdaten pro Favorit aus DB lesen; Einzelpreis über get_flight_price abfragen."""
-import sqlite3, os, logging
+import logging
 from datetime import datetime
 from skybreak.get_flight_price import get_flight_price
+from skybreak.db import connect_db
 
 logger = logging.getLogger(__name__)
-DB_PATH = os.environ.get("DB_FILE", "/data/skybreak.db")
 
 def fetch_prices_favorite(favorite_id, force=False):
     try:
-        conn = sqlite3.connect(DB_PATH, timeout=30.0)
+        conn = connect_db()
         row = conn.execute("SELECT id, start_airport, destination_airport, outbound_trip_date, return_trip_date, outbound_flight_number, return_flight_number FROM favorite_trips WHERE id = ?", (favorite_id,)).fetchone()
         conn.close()
         if not row:
@@ -42,7 +42,7 @@ def fetch_prices_favorite(favorite_id, force=False):
         else:
             total = (price_out or 0) + (price_ret or 0) if (price_out is not None or price_ret is not None) else None
         if price_out is not None or price_ret is not None:
-            conn = sqlite3.connect(DB_PATH, timeout=30.0)
+            conn = connect_db()
             conn.execute("INSERT OR REPLACE INTO favorite_trip_prices (favorite_id, price_outbound, price_return, price_total, currency, fetched_at) VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)", (favorite_id, price_out, price_ret, total, "EUR"))
             conn.commit()
             conn.close()
@@ -53,7 +53,7 @@ def fetch_prices_favorite(favorite_id, force=False):
         return {"favorite_id": favorite_id, "error": str(e)}
 
 def get_prices_for_favorite(favorite_id):
-    conn = sqlite3.connect(DB_PATH, timeout=30.0)
+    conn = connect_db()
     row = conn.execute("SELECT price_outbound, price_return, price_total, currency, fetched_at FROM favorite_trip_prices WHERE favorite_id = ? ORDER BY fetched_at DESC LIMIT 1", (favorite_id,)).fetchone()
     conn.close()
     if row:

@@ -1,4 +1,4 @@
-import sqlite3, os, pytest
+import sqlite3, os
 DB_PATH = os.environ.get("DB_FILE", "/data/skybreak.db")
 
 def test_price_chart_history_returns_series():
